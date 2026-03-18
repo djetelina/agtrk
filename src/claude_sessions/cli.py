@@ -192,3 +192,14 @@ def cleanup_cmd(
         raise typer.Exit(1)
     finally:
         conn.close()
+
+
+@app.command()
+def tui() -> None:
+    """Open the TUI dashboard."""
+    try:
+        from claude_sessions.tui import run_tui
+    except ImportError:
+        console.print("[red]Error:[/red] TUI requires the 'tui' extra: uv tool install claude-sessions[tui]")
+        raise typer.Exit(1)
+    run_tui()

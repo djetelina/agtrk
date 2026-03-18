@@ -15,6 +15,11 @@ dependencies = [
 [project.scripts]
 agtrk = "claude_sessions.cli:app"
 
+[project.optional-dependencies]
+tui = [
+    "textual>=8.1.1",
+]
+
 [dependency-groups]
 dev = [
     "pytest>=8",
