@@ -81,7 +81,12 @@ class SessionDashboard(App):
     def _load_table(self) -> None:
         table = self.query_one(DataTable)
         table.clear(columns=True)
-        table.add_columns("ID", "", "Task", "Repo", "Jira", "Updated")
+        table.add_column("ID", width=15)
+        table.add_column("", width=2)
+        table.add_column("Task", width=25)
+        table.add_column("Repo", width=15)
+        table.add_column("Jira", width=10)
+        table.add_column("Updated", width=8)
 
         conn = get_db()
         try:
@@ -98,11 +103,10 @@ class SessionDashboard(App):
             else:
                 style = ""
 
-            truncated_id = s.id[:15] + "…" if len(s.id) > 15 else s.id
             emoji = STATUS_EMOJI.get(s.status, "")
 
             table.add_row(
-                Text(truncated_id, style=style),
+                Text(s.id, style=style),
                 Text(emoji),
                 Text(s.task, style=style),
                 Text(s.repo or "", style=style),
