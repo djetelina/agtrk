@@ -92,7 +92,6 @@ def show(
 def list_cmd(
     archived: bool = typer.Option(False, "--archived", help="Show only archived sessions"),
     show_all: bool = typer.Option(False, "--all", help="Show all sessions including archived"),
-    verbose: bool = typer.Option(False, "--verbose", "-v", help="Show all columns"),
 ) -> None:
     """List sessions."""
     conn = get_db()
@@ -108,20 +107,18 @@ def list_cmd(
         table.add_column("ID", style="bold")
         table.add_column("Status")
         table.add_column("Task")
+        table.add_column("Repo")
+        table.add_column("Jira")
         table.add_column("Updated")
-        if verbose:
-            table.add_column("Repo")
-            table.add_column("Jira")
         for s in sessions:
-            row = [
+            table.add_row(
                 s.id,
                 str(s.status),
                 s.task,
+                s.repo or "",
+                s.jira or "",
                 f"{s.updated_at:%Y-%m-%d %H:%M}",
-            ]
-            if verbose:
-                row.extend([s.repo or "", s.jira or ""])
-            table.add_row(*row)
+            )
         console.print(table)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")

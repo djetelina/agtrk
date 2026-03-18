@@ -1,5 +1,7 @@
 """TUI dashboard for claude-sessions."""
 
+from datetime import datetime, timedelta
+
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -10,6 +12,7 @@ from claude_sessions.models import Status
 from claude_sessions.service import get_session, list_sessions
 
 REFRESH_INTERVAL = 30
+STALE_THRESHOLD = timedelta(minutes=300)
 
 
 class SessionDashboard(App):
@@ -66,8 +69,14 @@ class SessionDashboard(App):
         finally:
             conn.close()
 
+        now = datetime.now()
         for s in sessions:
-            style = "dim italic" if s.status == Status.done else ""
+            if s.status == Status.done:
+                style = "dim italic"
+            elif s.status != Status.todo and (now - s.updated_at) > STALE_THRESHOLD:
+                style = "red"
+            else:
+                style = ""
             table.add_row(
                 Text(s.id, style=style),
                 Text(str(s.status), style=style),
