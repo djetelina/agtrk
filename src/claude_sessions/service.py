@@ -1,0 +1,190 @@
+"""Service layer for claude-sessions.
+
+Sits between db.py (raw SQL/connection management) and cli.py (Typer commands).
+All functions accept an open sqlite3.Connection — callers are responsible for
+obtaining the connection (e.g. via get_db()).
+"""
+from __future__ import annotations
+
+import sqlite3
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Optional
+
+from claude_sessions.models import Note, Session, Status, generate_slug
+
+
+@dataclass
+class SessionWithNotes:
+    """A Session together with its associated notes."""
+
+    id: str
+    task: str
+    repo: Optional[str]
+    status: Status
+    jira: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    completed_at: Optional[datetime]
+    notes: list[Note]
+
+
+# ---------------------------------------------------------------------------
+# register_session
+# ---------------------------------------------------------------------------
+
+
+def register_session(
+    conn: sqlite3.Connection,
+    task: str,
+    repo: Optional[str] = None,
+    status: str = "planning",
+    jira: Optional[str] = None,
+    note: Optional[str] = None,
+) -> Session:
+    """Create a new session and optionally attach an initial note.
+
+    Args:
+        conn: Open database connection.
+        task: Human-readable task description (used to derive the slug/id).
+        repo: Optional repository name.
+        status: Initial status string (default ``"planning"``).
+        jira: Optional Jira ticket key.
+        note: Optional initial note content.
+
+    Returns:
+        The newly created :class:`~claude_sessions.models.Session`.
+    """
+    rows = conn.execute("SELECT id FROM session").fetchall()
+    existing_slugs: set[str] = {row["id"] for row in rows}
+
+    slug = generate_slug(task, existing_slugs)
+    now = datetime.now().isoformat()
+
+    conn.execute(
+        """
+        INSERT INTO session (id, task, repo, status, jira, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (slug, task, repo, status, jira, now, now),
+    )
+
+    if note is not None:
+        conn.execute(
+            "INSERT INTO note (session_id, content, created_at) VALUES (?, ?, ?)",
+            (slug, note, now),
+        )
+
+    conn.commit()
+
+    return Session(
+        id=slug,
+        task=task,
+        repo=repo,
+        status=Status(status),
+        jira=jira,
+        created_at=datetime.fromisoformat(now),
+        updated_at=datetime.fromisoformat(now),
+        completed_at=None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# _resolve_session_id
+# ---------------------------------------------------------------------------
+
+
+def _resolve_session_id(conn: sqlite3.Connection, id_or_prefix: str) -> str:
+    """Resolve a full ID or unique prefix to a session id.
+
+    Args:
+        conn: Open database connection.
+        id_or_prefix: Exact session id or a prefix string.
+
+    Returns:
+        The matching session id.
+
+    Raises:
+        ValueError: If no match is found or the prefix is ambiguous.
+    """
+    # Try exact match first
+    exact = conn.execute(
+        "SELECT id FROM session WHERE id = ?", (id_or_prefix,)
+    ).fetchone()
+    if exact is not None:
+        return exact["id"]
+
+    # Prefix match
+    matches = conn.execute(
+        "SELECT id FROM session WHERE id LIKE ?", (f"{id_or_prefix}%",)
+    ).fetchall()
+
+    if len(matches) == 0:
+        raise ValueError(f"No session found matching '{id_or_prefix}'")
+
+    if len(matches) > 1:
+        matched_ids = ", ".join(row["id"] for row in matches)
+        raise ValueError(
+            f"Ambiguous prefix '{id_or_prefix}' matches: {matched_ids}"
+        )
+
+    return matches[0]["id"]
+
+
+# ---------------------------------------------------------------------------
+# get_session
+# ---------------------------------------------------------------------------
+
+
+def get_session(conn: sqlite3.Connection, id_or_prefix: str) -> SessionWithNotes:
+    """Fetch a session and all its notes.
+
+    Args:
+        conn: Open database connection.
+        id_or_prefix: Exact session id or a unique prefix.
+
+    Returns:
+        A :class:`SessionWithNotes` with notes ordered by ``created_at``.
+
+    Raises:
+        ValueError: If the id/prefix doesn't match exactly one session.
+    """
+    session_id = _resolve_session_id(conn, id_or_prefix)
+
+    row = conn.execute(
+        "SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "
+        "FROM session WHERE id = ?",
+        (session_id,),
+    ).fetchone()
+
+    note_rows = conn.execute(
+        "SELECT id, session_id, content, created_at "
+        "FROM note WHERE session_id = ? ORDER BY created_at ASC",
+        (session_id,),
+    ).fetchall()
+
+    notes = [
+        Note(
+            id=nr["id"],
+            session_id=nr["session_id"],
+            content=nr["content"],
+            created_at=datetime.fromisoformat(nr["created_at"]),
+        )
+        for nr in note_rows
+    ]
+
+    return SessionWithNotes(
+        id=row["id"],
+        task=row["task"],
+        repo=row["repo"],
+        status=Status(row["status"]),
+        jira=row["jira"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+        completed_at=(
+            datetime.fromisoformat(row["completed_at"])
+            if row["completed_at"] is not None
+            else None
+        ),
+        notes=notes,
+    )
