@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-session = "claude_sessions.cli:app"
+agtrk = "claude_sessions.cli:app"
 
 [dependency-groups]
 dev = [
