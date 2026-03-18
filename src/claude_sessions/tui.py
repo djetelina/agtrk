@@ -66,7 +66,7 @@ class SessionDashboard(App):
             conn.close()
 
         for s in sessions:
-            style = "dim italic" if s.status == Status.DONE else ""
+            style = "dim italic" if s.status == Status.done else ""
             table.add_row(
                 s.id,
                 str(s.status),
