@@ -8,6 +8,8 @@ from claude_sessions.db import get_db
 from claude_sessions.models import Status
 from claude_sessions.service import get_session, list_sessions
 
+REFRESH_INTERVAL = 30
+
 
 class SessionDashboard(App):
     """A TUI dashboard for viewing agent sessions."""
@@ -28,18 +30,18 @@ class SessionDashboard(App):
     DataTable {
         height: 1fr;
     }
+    .archived {
+        text-style: dim italic;
+    }
     """
 
     BINDINGS = [
         Binding("q", "quit", "Quit"),
         Binding("a", "toggle_archived", "Toggle archived"),
-        Binding("t", "toggle_todos", "Toggle todos"),
-        Binding("r", "refresh", "Refresh"),
         Binding("escape", "close_details", "Close details"),
     ]
 
     show_archived: bool = False
-    show_todos: bool = True
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -48,7 +50,9 @@ class SessionDashboard(App):
         yield Footer()
 
     def on_mount(self) -> None:
+        self.theme = "dracula"
         self._load_table()
+        self.set_interval(REFRESH_INTERVAL, self._load_table)
 
     def _load_table(self) -> None:
         table = self.query_one(DataTable)
@@ -62,8 +66,7 @@ class SessionDashboard(App):
             conn.close()
 
         for s in sessions:
-            if not self.show_todos and s.status == Status.TODO:
-                continue
+            style = "dim italic" if s.status == Status.DONE else ""
             table.add_row(
                 s.id,
                 str(s.status),
@@ -72,6 +75,7 @@ class SessionDashboard(App):
                 s.jira or "",
                 f"{s.updated_at:%Y-%m-%d %H:%M}",
                 key=s.id,
+                label=style,
             )
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
@@ -89,6 +93,8 @@ class SessionDashboard(App):
             f"Repo: {session.repo or '-'}  |  Jira: {session.jira or '-'}",
             f"Created: {session.created_at:%Y-%m-%d %H:%M}  |  Updated: {session.updated_at:%Y-%m-%d %H:%M}",
         ]
+        if session.completed_at:
+            lines.append(f"Completed: {session.completed_at:%Y-%m-%d %H:%M}")
         if session.notes:
             lines.append("")
             lines.append("[bold]Notes:[/bold]")
@@ -110,17 +116,6 @@ class SessionDashboard(App):
         self._load_table()
         state = "on" if self.show_archived else "off"
         self.notify(f"Archived: {state}")
-
-    def action_toggle_todos(self) -> None:
-        self.show_todos = not self.show_todos
-        self.query_one("#details", Static).remove_class("visible")
-        self._load_table()
-        state = "on" if self.show_todos else "off"
-        self.notify(f"Todos: {state}")
-
-    def action_refresh(self) -> None:
-        self._load_table()
-        self.notify("Refreshed")
 
 
 def run_tui() -> None:
