@@ -14,6 +14,29 @@ from claude_sessions.service import get_session, list_sessions
 REFRESH_INTERVAL = 30
 STALE_THRESHOLD = timedelta(minutes=300)
 
+STATUS_EMOJI = {
+    Status.todo: "📋",
+    Status.planning: "🧠",
+    Status.implementing: "🔨",
+    Status.waiting: "⏳",
+    Status.done: "✅",
+}
+
+
+def _time_ago(dt: datetime) -> str:
+    delta = datetime.now() - dt
+    seconds = int(delta.total_seconds())
+    if seconds < 60:
+        return "just now"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 24:
+        return f"{hours}h ago"
+    days = hours // 24
+    return f"{days}d ago"
+
 
 class SessionDashboard(App):
     """A TUI dashboard for viewing agent sessions."""
@@ -33,9 +56,6 @@ class SessionDashboard(App):
     }
     DataTable {
         height: 1fr;
-    }
-    .archived {
-        text-style: dim italic;
     }
     """
 
@@ -61,7 +81,7 @@ class SessionDashboard(App):
     def _load_table(self) -> None:
         table = self.query_one(DataTable)
         table.clear(columns=True)
-        table.add_columns("ID", "Status", "Task", "Repo", "Jira", "Updated")
+        table.add_columns("ID", "", "Task", "Repo", "Jira", "Updated")
 
         conn = get_db()
         try:
@@ -77,13 +97,17 @@ class SessionDashboard(App):
                 style = "red"
             else:
                 style = ""
+
+            truncated_id = s.id[:15] + "…" if len(s.id) > 15 else s.id
+            emoji = STATUS_EMOJI.get(s.status, "")
+
             table.add_row(
-                Text(s.id, style=style),
-                Text(str(s.status), style=style),
+                Text(truncated_id, style=style),
+                Text(emoji),
                 Text(s.task, style=style),
                 Text(s.repo or "", style=style),
                 Text(s.jira or "", style=style),
-                Text(f"{s.updated_at:%Y-%m-%d %H:%M}", style=style),
+                Text(_time_ago(s.updated_at), style=style),
                 key=s.id,
             )
 
@@ -97,10 +121,12 @@ class SessionDashboard(App):
         finally:
             conn.close()
 
+        emoji = STATUS_EMOJI.get(session.status, "")
         lines = [
-            f"[bold]{session.task}[/bold] ({session.status})",
+            f"[bold]{session.task}[/bold] {emoji} {session.status}",
+            f"ID: {session.id}",
             f"Repo: {session.repo or '-'}  |  Jira: {session.jira or '-'}",
-            f"Created: {session.created_at:%Y-%m-%d %H:%M}  |  Updated: {session.updated_at:%Y-%m-%d %H:%M}",
+            f"Created: {session.created_at:%Y-%m-%d %H:%M}  |  Updated: {_time_ago(session.updated_at)}",
         ]
         if session.completed_at:
             lines.append(f"Completed: {session.completed_at:%Y-%m-%d %H:%M}")

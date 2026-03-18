@@ -107,16 +107,12 @@ def list_cmd(
         table.add_column("ID", style="bold")
         table.add_column("Status")
         table.add_column("Task")
-        table.add_column("Repo")
-        table.add_column("Jira")
         table.add_column("Updated")
         for s in sessions:
             table.add_row(
                 s.id,
                 str(s.status),
                 s.task,
-                s.repo or "",
-                s.jira or "",
                 f"{s.updated_at:%Y-%m-%d %H:%M}",
             )
         console.print(table)
