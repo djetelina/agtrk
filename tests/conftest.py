@@ -1,4 +1,7 @@
 """Shared pytest fixtures for claude-sessions tests."""
+import os
+from pathlib import Path
+
 import pytest
 
 from claude_sessions.db import get_db
@@ -16,3 +19,10 @@ def db(tmp_db):
     conn = get_db(tmp_db)
     yield conn
     conn.close()
+
+
+@pytest.fixture
+def tmp_db_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    """Set env var so CLI uses a temp database."""
+    db_file = tmp_path / "test.db"
+    monkeypatch.setenv("CLAUDE_SESSIONS_DB", str(db_file))
