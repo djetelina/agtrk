@@ -47,6 +47,14 @@ def _is_stale(s: Session) -> bool:
     return s.status != Status.todo and (datetime.now() - s.updated_at) > STALE_THRESHOLD
 
 
+def _status_dot(s: Session) -> str:
+    if s.status == Status.todo:
+        return "[dim]○[/dim]"
+    if _is_stale(s):
+        return "[red]●[/red]"
+    return "[green]●[/green]"
+
+
 def _group_by_status(sessions: list[Session], include_done: bool = False) -> dict[Status, list[Session]]:
     groups: dict[Status, list[Session]] = {s: [] for s in KANBAN_STATUSES}
     if include_done:
@@ -182,12 +190,12 @@ def _build_detail_content(session_id: str) -> str:
     lines = [
         f"{emoji} [bold]{session.task}[/bold]",
         "",
-        f"  [dim]ID[/dim]       {session.id}",
-        f"  [dim]Status[/dim]   {session.status}",
-        f"  [dim]Repo[/dim]     {session.repo or '-'}",
-        f"  [dim]Jira[/dim]     {session.jira or '-'}",
-        f"  [dim]Created[/dim]  {_time_ago(session.created_at)}  [dim italic]{session.created_at:%Y-%m-%d %H:%M}[/dim italic]",
-        f"  [dim]Updated[/dim]  {_time_ago(session.updated_at)}  [dim italic]{session.updated_at:%Y-%m-%d %H:%M}[/dim italic]",
+        f"  [dim]ID[/dim]        {session.id}",
+        f"  [dim]Status[/dim]    {session.status}",
+        f"  [dim]Repo[/dim]      {session.repo or '-'}",
+        f"  [dim]Issue[/dim]     {session.jira or '-'}",
+        f"  [dim]Created[/dim]   {_time_ago(session.created_at)}  [dim italic]{session.created_at:%Y-%m-%d %H:%M}[/dim italic]",
+        f"  [dim]Heartbeat[/dim] {_time_ago(session.updated_at)}  [dim italic]{session.updated_at:%Y-%m-%d %H:%M}[/dim italic]",
     ]
     if session.completed_at:
         lines.append(f"  [dim]Done[/dim]     {_time_ago(session.completed_at)}  [dim italic]{session.completed_at:%Y-%m-%d %H:%M}[/dim italic]")
@@ -276,9 +284,7 @@ class CardItem(Static):
         repo = s.repo or ""
         with Horizontal(classes="card-meta"):
             yield Static(repo, classes="card-meta-left")
-            yield Static(_time_ago(s.updated_at), classes="card-meta-right")
-        if _is_stale(s):
-            self.add_class("stale")
+            yield Static(_status_dot(s), classes="card-meta-right")
 
     def on_click(self) -> None:
         self.app.push_screen(DetailScreen(_build_detail_content(self.session.id)))
@@ -398,34 +404,31 @@ class SessionDashboard(App):
     def _load_table(self) -> None:
         table = self.query_one("#table-view", DataTable)
         table.clear(columns=True)
-        # Fixed columns: ID(16) + emoji(2) + Repo(16) + Jira(10) + Updated(10) + borders/padding(~10) = ~64
-        # Task gets the rest
+        # Fixed columns: dot(1) + ID(16) + emoji(2) + Repo(16) + Jira(10) + borders/padding(~10) = ~55
         term_width = self.size.width
-        task_width = max(20, term_width - 64)
+        task_width = max(20, term_width - 55)
 
+        table.add_column("", width=1)
         table.add_column("ID", width=16)
         table.add_column("", width=2)
         table.add_column("Task", width=task_width)
         table.add_column("Repo", width=16)
-        table.add_column("Jira", width=10)
-        table.add_column("Updated", width=10)
+        table.add_column("Issue", width=10)
 
         for s in self._sessions:
             if s.status == Status.done:
                 style = "dim italic"
-            elif _is_stale(s):
-                style = "red"
             else:
                 style = ""
             emoji = STATUS_EMOJI.get(s.status, "")
             task = s.task[:task_width] + "…" if len(s.task) > task_width else s.task
             table.add_row(
+                Text.from_markup(_status_dot(s)),
                 Text(s.id, style=style),
                 Text(emoji),
                 Text(task, style=style),
                 Text(s.repo or "", style=style),
                 Text(s.jira or "", style=style),
-                Text(_time_ago(s.updated_at), style=style),
                 key=s.id,
             )
 

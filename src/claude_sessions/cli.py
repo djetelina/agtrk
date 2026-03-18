@@ -51,7 +51,7 @@ def _print_list(archived: bool, show_all: bool, verbose: bool = False) -> None:
         table.add_column("Updated")
         if verbose:
             table.add_column("Repo")
-            table.add_column("Jira")
+            table.add_column("Issue")
         for s in sessions:
             row = [
                 s.id,
@@ -91,7 +91,7 @@ def show(
         console.print(f"[bold]Task:[/bold] {session.task}")
         console.print(f"[bold]Status:[/bold] {session.status}")
         console.print(f"[bold]Repo:[/bold] {session.repo or '-'}")
-        console.print(f"[bold]Jira:[/bold] {session.jira or '-'}")
+        console.print(f"[bold]Issue:[/bold] {session.jira or '-'}")
         console.print(f"[bold]Created:[/bold] {session.created_at:%Y-%m-%d %H:%M}")
         console.print(f"[bold]Updated:[/bold] {session.updated_at:%Y-%m-%d %H:%M}")
         if session.completed_at:
@@ -139,7 +139,7 @@ def register(
     task: str = typer.Option(..., "--task", help="Task description"),
     repo: Optional[str] = typer.Option(None, "--repo", help="Repository name"),
     status: str = typer.Option("planning", "--status", help="Initial status"),
-    jira: Optional[str] = typer.Option(None, "--jira", help="Jira ticket key"),
+    jira: Optional[str] = typer.Option(None, "--jira", "--issue", help="Issue/ticket key"),
     note: Optional[str] = typer.Option(None, "--note", help="Initial note"),
 ) -> None:
     """Register a new session."""
@@ -160,7 +160,7 @@ def update(
     task: Optional[str] = typer.Option(None, "--task", help="New task description"),
     repo: Optional[str] = typer.Option(None, "--repo", help="New repository name"),
     status: Optional[str] = typer.Option(None, "--status", help="New status"),
-    jira: Optional[str] = typer.Option(None, "--jira", help="New Jira ticket key"),
+    jira: Optional[str] = typer.Option(None, "--jira", "--issue", help="Issue/ticket key"),
     note: Optional[str] = typer.Option(None, "--note", help="Note to append"),
 ) -> None:
     """Update a session."""
