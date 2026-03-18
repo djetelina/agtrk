@@ -4,9 +4,11 @@ import pytest
 from claude_sessions.models import Session, Status
 from claude_sessions.service import (
     SessionWithNotes,
+    cleanup,
     complete_session,
     get_session,
     heartbeat,
+    list_sessions,
     register_session,
     reopen_session,
     update_session,
@@ -260,3 +262,100 @@ class TestReopenSession:
         result = reopen_session(db, session.id, status="waiting")
         assert result.status == Status.waiting
         assert result.completed_at is None
+
+
+class TestListSessions:
+    def test_list_active_sessions(self, db):
+        """Default list returns only active (not completed) sessions."""
+        register_session(db, task="Active one")
+        register_session(db, task="Active two")
+        s3 = register_session(db, task="Completed one")
+        complete_session(db, s3.id)
+
+        results = list_sessions(db)
+        assert len(results) == 2
+        ids = {s.id for s in results}
+        assert "active-one" in ids
+        assert "active-two" in ids
+
+    def test_list_archived_only(self, db):
+        """archived_only=True returns only completed sessions."""
+        register_session(db, task="Still active")
+        s2 = register_session(db, task="Archived one")
+        complete_session(db, s2.id)
+
+        results = list_sessions(db, archived_only=True)
+        assert len(results) == 1
+        assert results[0].id == "archived-one"
+
+    def test_list_all(self, db):
+        """include_archived=True returns all sessions."""
+        register_session(db, task="Active session")
+        s2 = register_session(db, task="Done session")
+        complete_session(db, s2.id)
+
+        results = list_sessions(db, include_archived=True)
+        assert len(results) == 2
+
+    def test_list_empty(self, db):
+        """Empty database returns empty list."""
+        results = list_sessions(db)
+        assert results == []
+
+
+class TestCleanup:
+    def test_cleanup_removes_old_archived(self, db):
+        """Archived sessions older than threshold are deleted."""
+        s = register_session(db, task="Old done task")
+        complete_session(db, s.id)
+        old_date = "2025-01-01T00:00:00"
+        db.execute(
+            "UPDATE session SET completed_at = ? WHERE id = ?", (old_date, s.id)
+        )
+        db.commit()
+
+        count = cleanup(db, older_than_days=30)
+        assert count == 1
+        row = db.execute("SELECT id FROM session WHERE id = ?", (s.id,)).fetchone()
+        assert row is None
+
+    def test_cleanup_keeps_recent_archived(self, db):
+        """Archived sessions completed recently are not deleted."""
+        s = register_session(db, task="Recent done task")
+        complete_session(db, s.id)
+
+        count = cleanup(db, older_than_days=30)
+        assert count == 0
+        row = db.execute("SELECT id FROM session WHERE id = ?", (s.id,)).fetchone()
+        assert row is not None
+
+    def test_cleanup_keeps_active(self, db):
+        """Active sessions with old updated_at are not deleted by cleanup."""
+        s = register_session(db, task="Old active task")
+        old_date = "2025-01-01T00:00:00"
+        db.execute(
+            "UPDATE session SET updated_at = ? WHERE id = ?", (old_date, s.id)
+        )
+        db.commit()
+
+        count = cleanup(db, older_than_days=30)
+        assert count == 0
+        row = db.execute("SELECT id FROM session WHERE id = ?", (s.id,)).fetchone()
+        assert row is not None
+
+    def test_cleanup_deletes_notes_too(self, db):
+        """Cleanup of an archived session also removes its notes (CASCADE)."""
+        s = register_session(db, task="Session with notes", note="A note")
+        complete_session(db, s.id)
+        old_date = "2025-01-01T00:00:00"
+        db.execute(
+            "UPDATE session SET completed_at = ? WHERE id = ?", (old_date, s.id)
+        )
+        db.commit()
+
+        count = cleanup(db, older_than_days=30)
+        assert count == 1
+        note_rows = db.execute(
+            "SELECT id FROM note WHERE session_id = ?", (s.id,)
+        ).fetchall()
+        assert note_rows == []

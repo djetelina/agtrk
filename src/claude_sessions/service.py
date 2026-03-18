@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from claude_sessions.models import Note, Session, Status, generate_slug
@@ -381,3 +381,65 @@ def reopen_session(
         (session_id,),
     ).fetchone()
     return _row_to_session(row)
+
+
+# ---------------------------------------------------------------------------
+# list_sessions
+# ---------------------------------------------------------------------------
+
+
+def list_sessions(
+    conn: sqlite3.Connection,
+    include_archived: bool = False,
+    archived_only: bool = False,
+) -> list[Session]:
+    """Return a list of sessions ordered by updated_at descending.
+
+    Args:
+        conn: Open database connection.
+        include_archived: When True, return all sessions regardless of completion.
+        archived_only: When True, return only completed sessions.
+
+    Returns:
+        A list of :class:`~claude_sessions.models.Session` objects.
+    """
+    if archived_only:
+        where = "WHERE completed_at IS NOT NULL"
+    elif include_archived:
+        where = ""
+    else:
+        where = "WHERE completed_at IS NULL"
+
+    rows = conn.execute(
+        f"SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "  # noqa: S608
+        f"FROM session {where} ORDER BY updated_at DESC"
+    ).fetchall()
+
+    return [_row_to_session(row) for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# cleanup
+# ---------------------------------------------------------------------------
+
+
+def cleanup(conn: sqlite3.Connection, older_than_days: int = 30) -> int:
+    """Delete archived sessions older than the given threshold.
+
+    Notes are deleted automatically via CASCADE.
+
+    Args:
+        conn: Open database connection.
+        older_than_days: Sessions with completed_at older than this many days
+            are deleted.
+
+    Returns:
+        The number of sessions deleted.
+    """
+    cutoff = (datetime.now() - timedelta(days=older_than_days)).isoformat()
+    cursor = conn.execute(
+        "DELETE FROM session WHERE completed_at IS NOT NULL AND completed_at < ?",
+        (cutoff,),
+    )
+    conn.commit()
+    return cursor.rowcount
