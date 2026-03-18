@@ -26,8 +26,19 @@ app = typer.Typer(
 console = Console()
 
 
+def _version_callback(value: bool) -> None:
+    if value:
+        from claude_sessions import __version__
+
+        typer.echo(f"agtrk {__version__}")
+        raise typer.Exit
+
+
 @app.callback()
-def default(ctx: typer.Context) -> None:
+def default(
+    ctx: typer.Context,
+    version: bool = typer.Option(False, "--version", "-V", callback=_version_callback, is_eager=True, help="Show version and exit."),
+) -> None:
     """Show active sessions if no command is given."""
     if ctx.invoked_subcommand is not None:
         return

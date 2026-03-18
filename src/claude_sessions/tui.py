@@ -1,5 +1,6 @@
 """TUI dashboard for claude-sessions."""
 
+import math
 from datetime import datetime, timedelta
 
 from rich.text import Text
@@ -15,6 +16,7 @@ from claude_sessions.models import Session, Status
 from claude_sessions.service import get_session, list_sessions
 
 REFRESH_INTERVAL = 30
+FRESH_THRESHOLD = timedelta(minutes=15)
 STALE_THRESHOLD = timedelta(minutes=100)
 
 STATUS_EMOJI = {
@@ -43,16 +45,31 @@ def _time_ago(dt: datetime) -> str:
     return f"{days}d ago"
 
 
+def _heartbeat_tier(s: Session) -> str:
+    """Return 'todo', 'fresh', 'warm', or 'stale' based on heartbeat age."""
+    if s.status == Status.todo:
+        return "todo"
+    age = datetime.now() - s.updated_at
+    if age <= FRESH_THRESHOLD:
+        return "fresh"
+    if age <= STALE_THRESHOLD:
+        return "warm"
+    return "stale"
+
+
 def _is_stale(s: Session) -> bool:
-    return s.status != Status.todo and (datetime.now() - s.updated_at) > STALE_THRESHOLD
+    return _heartbeat_tier(s) == "stale"
 
 
 def _status_dot(s: Session) -> str:
-    if s.status == Status.todo:
+    tier = _heartbeat_tier(s)
+    if tier == "todo":
         return "[dim]○[/dim]"
-    if _is_stale(s):
-        return "[red]●[/red]"
-    return "[green]●[/green]"
+    if tier == "fresh":
+        return "[green]●[/green]"
+    if tier == "warm":
+        return "[dark_orange]●[/dark_orange]"
+    return "[red]●[/red]"
 
 
 def _group_by_status(sessions: list[Session], include_done: bool = False) -> dict[Status, list[Session]]:
@@ -63,6 +80,41 @@ def _group_by_status(sessions: list[Session], include_done: bool = False) -> dic
         if s.status in groups:
             groups[s.status].append(s)
     return groups
+
+
+# ---------------------------------------------------------------------------
+# Breathing dot (smooth opacity pulse for fresh heartbeats)
+# ---------------------------------------------------------------------------
+
+BREATH_PERIOD = 4.0  # seconds per full cycle — calm, human-like
+BREATH_MIN_OPACITY = 0.3
+BREATH_FPS = 15
+
+
+class BreathingDot(Static):
+    """A status dot that gently pulses opacity when the heartbeat is fresh."""
+
+    DEFAULT_CSS = """
+    BreathingDot {
+        width: auto;
+        height: 1;
+    }
+    """
+
+    def __init__(self, session: Session, **kwargs: object) -> None:
+        super().__init__(_status_dot(session), **kwargs)
+        self._breathing = _heartbeat_tier(session) == "fresh"
+        self._phase = 0.0
+
+    def on_mount(self) -> None:
+        if self._breathing:
+            self._timer = self.set_interval(1 / BREATH_FPS, self._breathe)
+
+    def _breathe(self) -> None:
+        self._phase += (1 / BREATH_FPS) / BREATH_PERIOD * 2 * math.pi
+        mid = (1.0 + BREATH_MIN_OPACITY) / 2
+        amp = (1.0 - BREATH_MIN_OPACITY) / 2
+        self.styles.text_opacity = mid + amp * math.sin(self._phase)
 
 
 # ---------------------------------------------------------------------------
@@ -284,7 +336,7 @@ class CardItem(Static):
         repo = s.repo or ""
         with Horizontal(classes="card-meta"):
             yield Static(repo, classes="card-meta-left")
-            yield Static(_status_dot(s), classes="card-meta-right")
+            yield BreathingDot(s, classes="card-meta-right")
 
     def on_click(self) -> None:
         self.app.push_screen(DetailScreen(_build_detail_content(self.session.id)))
@@ -356,10 +408,10 @@ class SessionDashboard(App):
     TITLE = "agtrk"
     CSS = """
     #header { dock: top; height: 3; layout: horizontal; }
-    #table-view { height: 1fr; }
-    #board { width: 1fr; height: 1fr; display: none; }
-    #board.visible { display: block; }
-    #table-view.hidden { display: none; }
+    #table-view { height: 1fr; display: none; }
+    #board { width: 1fr; height: 1fr; }
+    #board.hidden { display: none; }
+    #table-view.visible { display: block; }
     """
 
     BINDINGS = [
@@ -370,7 +422,7 @@ class SessionDashboard(App):
     ]
 
     show_archived: reactive[bool] = reactive(False)
-    kanban_view: bool = False
+    kanban_view: bool = True
     _sessions: list[Session] = []
 
     def compose(self) -> ComposeResult:
@@ -384,6 +436,9 @@ class SessionDashboard(App):
         self.theme = "dracula"
         self._load_data()
         self.set_interval(REFRESH_INTERVAL, self._load_data)
+        cols = list(self.query(CardColumn))
+        if cols:
+            cols[0].focus()
 
     def _refresh_header(self) -> None:
         view = "kanban" if self.kanban_view else "table"
@@ -466,8 +521,8 @@ class SessionDashboard(App):
 
     def action_toggle_view(self) -> None:
         self.kanban_view = not self.kanban_view
-        self.query_one("#table-view").toggle_class("hidden")
-        self.query_one("#board").toggle_class("visible")
+        self.query_one("#table-view").toggle_class("visible")
+        self.query_one("#board").toggle_class("hidden")
         if self.kanban_view:
             cols = list(self.query(CardColumn))
             if cols:

@@ -1,2 +1,3 @@
-def hello() -> str:
-    return "Hello from claude-sessions!"
+from importlib.metadata import version
+
+__version__ = version("claude-sessions")
