@@ -1,5 +1,6 @@
 """TUI dashboard for claude-sessions."""
 
+from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
 from textual.widgets import DataTable, Footer, Header, Static
@@ -68,14 +69,13 @@ class SessionDashboard(App):
         for s in sessions:
             style = "dim italic" if s.status == Status.done else ""
             table.add_row(
-                s.id,
-                str(s.status),
-                s.task,
-                s.repo or "",
-                s.jira or "",
-                f"{s.updated_at:%Y-%m-%d %H:%M}",
+                Text(s.id, style=style),
+                Text(str(s.status), style=style),
+                Text(s.task, style=style),
+                Text(s.repo or "", style=style),
+                Text(s.jira or "", style=style),
+                Text(f"{s.updated_at:%Y-%m-%d %H:%M}", style=style),
                 key=s.id,
-                label=style,
             )
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
