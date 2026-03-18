@@ -7,12 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-03-18
+
 ### Added
 
 - TUI heartbeat breathing animation — fresh heartbeats (within 15min) show a
   smoothly pulsing green dot in kanban view
 - Three-tier heartbeat status colors: green (fresh), orange (warm), red (stale)
 - Kanban is now the default TUI view
+- `--version` / `-V` flag on CLI
+- `CLAUDE.md` project conventions and `CHANGELOG.md`
 
 ### Changed
 

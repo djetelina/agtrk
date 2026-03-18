@@ -1,6 +1,6 @@
 [project]
 name = "claude-sessions"
-version = "0.1.0"
+version = "0.2.0"
 description = "CLI tool for tracking Claude Code sessions"
 readme = "README.md"
 authors = [
