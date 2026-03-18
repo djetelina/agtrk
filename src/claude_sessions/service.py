@@ -163,29 +163,18 @@ def get_session(conn: sqlite3.Connection, id_or_prefix: str) -> SessionWithNotes
         (session_id,),
     ).fetchall()
 
-    notes = [
-        Note(
-            id=nr["id"],
-            session_id=nr["session_id"],
-            content=nr["content"],
-            created_at=datetime.fromisoformat(nr["created_at"]),
-        )
-        for nr in note_rows
-    ]
+    notes = [_row_to_note(nr) for nr in note_rows]
+    session = _row_to_session(row)
 
     return SessionWithNotes(
-        id=row["id"],
-        task=row["task"],
-        repo=row["repo"],
-        status=Status(row["status"]),
-        jira=row["jira"],
-        created_at=datetime.fromisoformat(row["created_at"]),
-        updated_at=datetime.fromisoformat(row["updated_at"]),
-        completed_at=(
-            datetime.fromisoformat(row["completed_at"])
-            if row["completed_at"] is not None
-            else None
-        ),
+        id=session.id,
+        task=session.task,
+        repo=session.repo,
+        status=session.status,
+        jira=session.jira,
+        created_at=session.created_at,
+        updated_at=session.updated_at,
+        completed_at=session.completed_at,
         notes=notes,
     )
 
@@ -210,6 +199,21 @@ def _row_to_session(row: sqlite3.Row) -> Session:
             if row["completed_at"] is not None
             else None
         ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# _row_to_note
+# ---------------------------------------------------------------------------
+
+
+def _row_to_note(row: sqlite3.Row) -> Note:
+    """Convert a sqlite3.Row from the note table to a Note dataclass."""
+    return Note(
+        id=row["id"],
+        session_id=row["session_id"],
+        content=row["content"],
+        created_at=datetime.fromisoformat(row["created_at"]),
     )
 
 
