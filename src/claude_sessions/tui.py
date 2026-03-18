@@ -1,5 +1,6 @@
 """TUI dashboard for claude-sessions."""
 
+import textwrap
 from datetime import datetime, timedelta
 
 from rich.text import Text
@@ -81,12 +82,12 @@ class SessionDashboard(App):
     def _load_table(self) -> None:
         table = self.query_one(DataTable)
         table.clear(columns=True)
-        table.add_column("ID", width=15)
-        table.add_column("", width=2)
-        table.add_column("Task", width=25)
-        table.add_column("Repo", width=15)
-        table.add_column("Jira", width=10)
-        table.add_column("Updated", width=8)
+        table.add_column("ID", max_width=16)
+        table.add_column("", max_width=2)
+        table.add_column("Task", max_width=35)
+        table.add_column("Repo")
+        table.add_column("Jira")
+        table.add_column("Updated")
 
         conn = get_db()
         try:
@@ -105,10 +106,12 @@ class SessionDashboard(App):
 
             emoji = STATUS_EMOJI.get(s.status, "")
 
+            wrapped_task = "\n".join(textwrap.wrap(s.task, width=35))
+
             table.add_row(
                 Text(s.id, style=style),
                 Text(emoji),
-                Text(s.task, style=style),
+                Text(wrapped_task, style=style),
                 Text(s.repo or "", style=style),
                 Text(s.jira or "", style=style),
                 Text(_time_ago(s.updated_at), style=style),
