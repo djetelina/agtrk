@@ -17,12 +17,8 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "rich" },
-    { name = "typer" },
-]
-
-[package.optional-dependencies]
-tui = [
     { name = "textual" },
+    { name = "typer" },
 ]
 
 [package.dev-dependencies]
@@ -33,10 +29,9 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "rich", specifier = ">=13" },
-    { name = "textual", marker = "extra == 'tui'", specifier = ">=8.1.1" },
+    { name = "textual", specifier = ">=8.1.1" },
     { name = "typer", specifier = ">=0.15" },
 ]
-provides-extras = ["tui"]
 
 [package.metadata.requires-dev]
 dev = [{ name = "pytest", specifier = ">=8" }]

@@ -10,15 +10,11 @@ requires-python = ">=3.12"
 dependencies = [
     "typer>=0.15",
     "rich>=13",
+    "textual>=8.1.1",
 ]
 
 [project.scripts]
 agtrk = "claude_sessions.cli:app"
-
-[project.optional-dependencies]
-tui = [
-    "textual>=8.1.1",
-]
 
 [dependency-groups]
 dev = [
