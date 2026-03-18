@@ -1,0 +1,25 @@
+[project]
+name = "claude-sessions"
+version = "0.1.0"
+description = "CLI tool for tracking Claude Code sessions"
+readme = "README.md"
+authors = [
+    { name = "David Jetelina", email = "david@djetelina.cz" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "typer>=0.15",
+    "rich>=13",
+]
+
+[project.scripts]
+session = "claude_sessions.cli:app"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+]
+
+[build-system]
+requires = ["uv_build>=0.10.11,<0.11.0"]
+build-backend = "uv_build"
