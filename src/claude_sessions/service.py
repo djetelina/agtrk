@@ -188,3 +188,196 @@ def get_session(conn: sqlite3.Connection, id_or_prefix: str) -> SessionWithNotes
         ),
         notes=notes,
     )
+
+
+# ---------------------------------------------------------------------------
+# _row_to_session
+# ---------------------------------------------------------------------------
+
+
+def _row_to_session(row: sqlite3.Row) -> Session:
+    """Convert a sqlite3.Row from the session table to a Session dataclass."""
+    return Session(
+        id=row["id"],
+        task=row["task"],
+        repo=row["repo"],
+        status=Status(row["status"]),
+        jira=row["jira"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+        completed_at=(
+            datetime.fromisoformat(row["completed_at"])
+            if row["completed_at"] is not None
+            else None
+        ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# update_session
+# ---------------------------------------------------------------------------
+
+
+def update_session(
+    conn: sqlite3.Connection,
+    id_or_prefix: str,
+    task: Optional[str] = None,
+    repo: Optional[str] = None,
+    status: Optional[str] = None,
+    jira: Optional[str] = None,
+    note: Optional[str] = None,
+) -> Session:
+    """Update session fields and optionally append a note.
+
+    Args:
+        conn: Open database connection.
+        id_or_prefix: Exact session id or a unique prefix.
+        task: New task description (optional).
+        repo: New repo value (optional).
+        status: New status string (optional).
+        jira: New Jira ticket key (optional).
+        note: Note content to append to the session timeline (optional).
+
+    Returns:
+        The updated :class:`~claude_sessions.models.Session`.
+    """
+    session_id = _resolve_session_id(conn, id_or_prefix)
+    now = datetime.now().isoformat()
+
+    fields: dict[str, object] = {"updated_at": now}
+    if task is not None:
+        fields["task"] = task
+    if repo is not None:
+        fields["repo"] = repo
+    if status is not None:
+        fields["status"] = status
+    if jira is not None:
+        fields["jira"] = jira
+
+    set_clause = ", ".join(f"{col} = ?" for col in fields)
+    values = list(fields.values()) + [session_id]
+    conn.execute(f"UPDATE session SET {set_clause} WHERE id = ?", values)  # noqa: S608
+
+    if note is not None:
+        conn.execute(
+            "INSERT INTO note (session_id, content, created_at) VALUES (?, ?, ?)",
+            (session_id, note, now),
+        )
+
+    conn.commit()
+
+    row = conn.execute(
+        "SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "
+        "FROM session WHERE id = ?",
+        (session_id,),
+    ).fetchone()
+    return _row_to_session(row)
+
+
+# ---------------------------------------------------------------------------
+# heartbeat
+# ---------------------------------------------------------------------------
+
+
+def heartbeat(conn: sqlite3.Connection, id_or_prefix: str) -> Session:
+    """Bump updated_at without changing any other fields.
+
+    Args:
+        conn: Open database connection.
+        id_or_prefix: Exact session id or a unique prefix.
+
+    Returns:
+        The updated :class:`~claude_sessions.models.Session`.
+    """
+    session_id = _resolve_session_id(conn, id_or_prefix)
+    now = datetime.now().isoformat()
+
+    conn.execute(
+        "UPDATE session SET updated_at = ? WHERE id = ?",
+        (now, session_id),
+    )
+    conn.commit()
+
+    row = conn.execute(
+        "SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "
+        "FROM session WHERE id = ?",
+        (session_id,),
+    ).fetchone()
+    return _row_to_session(row)
+
+
+# ---------------------------------------------------------------------------
+# complete_session
+# ---------------------------------------------------------------------------
+
+
+def complete_session(conn: sqlite3.Connection, id_or_prefix: str) -> Session:
+    """Mark a session as done.
+
+    Sets ``status`` to ``'done'``, ``completed_at`` to now, and bumps
+    ``updated_at``.
+
+    Args:
+        conn: Open database connection.
+        id_or_prefix: Exact session id or a unique prefix.
+
+    Returns:
+        The updated :class:`~claude_sessions.models.Session`.
+    """
+    session_id = _resolve_session_id(conn, id_or_prefix)
+    now = datetime.now().isoformat()
+
+    conn.execute(
+        "UPDATE session SET status = 'done', completed_at = ?, updated_at = ? "
+        "WHERE id = ?",
+        (now, now, session_id),
+    )
+    conn.commit()
+
+    row = conn.execute(
+        "SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "
+        "FROM session WHERE id = ?",
+        (session_id,),
+    ).fetchone()
+    return _row_to_session(row)
+
+
+# ---------------------------------------------------------------------------
+# reopen_session
+# ---------------------------------------------------------------------------
+
+
+def reopen_session(
+    conn: sqlite3.Connection,
+    id_or_prefix: str,
+    status: str = "implementing",
+) -> Session:
+    """Reopen a completed session.
+
+    Clears ``completed_at``, sets ``status`` to *status*, and bumps
+    ``updated_at``.
+
+    Args:
+        conn: Open database connection.
+        id_or_prefix: Exact session id or a unique prefix.
+        status: Status to transition to (default ``"implementing"``).
+
+    Returns:
+        The updated :class:`~claude_sessions.models.Session`.
+    """
+    session_id = _resolve_session_id(conn, id_or_prefix)
+    now = datetime.now().isoformat()
+
+    conn.execute(
+        "UPDATE session SET status = ?, completed_at = NULL, updated_at = ? "
+        "WHERE id = ?",
+        (status, now, session_id),
+    )
+    conn.commit()
+
+    row = conn.execute(
+        "SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "
+        "FROM session WHERE id = ?",
+        (session_id,),
+    ).fetchone()
+    return _row_to_session(row)

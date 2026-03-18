@@ -1,8 +1,16 @@
 """Tests for claude_sessions.service"""
 import pytest
 
-from claude_sessions.models import Status
-from claude_sessions.service import SessionWithNotes, get_session, register_session
+from claude_sessions.models import Session, Status
+from claude_sessions.service import (
+    SessionWithNotes,
+    complete_session,
+    get_session,
+    heartbeat,
+    register_session,
+    reopen_session,
+    update_session,
+)
 
 
 class TestRegisterSession:
@@ -146,3 +154,109 @@ class TestGetSession:
         assert result.repo == "my-repo"
         assert result.jira == "PLAT-99"
         assert result.status == Status.waiting
+
+
+class TestUpdateSession:
+    def test_update_status(self, db):
+        """update_session changes status to implementing."""
+        session = register_session(db, task="Status task")
+        updated = update_session(db, session.id, status="implementing")
+        assert isinstance(updated, Session)
+        assert updated.status == Status.implementing
+
+    def test_update_appends_note(self, db):
+        """update_session with note= stores a note visible via get_session."""
+        session = register_session(db, task="Note task")
+        update_session(db, session.id, note="Progress update")
+        result = get_session(db, session.id)
+        assert len(result.notes) == 1
+        assert result.notes[0].content == "Progress update"
+
+    def test_update_multiple_notes(self, db):
+        """Two updates with notes produce 2 notes in timeline."""
+        session = register_session(db, task="Multi note task")
+        update_session(db, session.id, note="First note")
+        update_session(db, session.id, note="Second note")
+        result = get_session(db, session.id)
+        assert len(result.notes) == 2
+        contents = [n.content for n in result.notes]
+        assert "First note" in contents
+        assert "Second note" in contents
+
+    def test_update_bumps_timestamp(self, db):
+        """updated_at increases after update."""
+        import time
+        session = register_session(db, task="Timestamp task")
+        before = session.updated_at
+        time.sleep(0.01)
+        updated = update_session(db, session.id, status="implementing")
+        assert updated.updated_at >= before
+
+    def test_update_jira(self, db):
+        """update_session sets jira field."""
+        session = register_session(db, task="Jira task")
+        updated = update_session(db, session.id, jira="PLAT-9999")
+        assert updated.jira == "PLAT-9999"
+
+    def test_update_repo(self, db):
+        """update_session sets repo field."""
+        session = register_session(db, task="Repo task")
+        updated = update_session(db, session.id, repo="new-repo")
+        assert updated.repo == "new-repo"
+
+    def test_update_task_description(self, db):
+        """update_session changes task text."""
+        session = register_session(db, task="Old task description")
+        updated = update_session(db, session.id, task="New task description")
+        assert updated.task == "New task description"
+
+
+class TestHeartbeat:
+    def test_heartbeat_bumps_timestamp(self, db):
+        """heartbeat updates updated_at."""
+        import time
+        session = register_session(db, task="Heartbeat task")
+        before = session.updated_at
+        time.sleep(0.01)
+        result = heartbeat(db, session.id)
+        assert isinstance(result, Session)
+        assert result.updated_at >= before
+
+    def test_heartbeat_does_not_change_fields(self, db):
+        """heartbeat leaves task, repo, status unchanged."""
+        session = register_session(
+            db, task="Stable task", repo="stable-repo", status="waiting"
+        )
+        result = heartbeat(db, session.id)
+        assert result.task == "Stable task"
+        assert result.repo == "stable-repo"
+        assert result.status == Status.waiting
+
+
+class TestCompleteSession:
+    def test_complete_sets_done(self, db):
+        """complete_session sets status=done and completed_at is not None."""
+        session = register_session(db, task="Complete task")
+        result = complete_session(db, session.id)
+        assert isinstance(result, Session)
+        assert result.status == Status.done
+        assert result.completed_at is not None
+
+
+class TestReopenSession:
+    def test_reopen_clears_completion(self, db):
+        """reopen_session sets completed_at=None and status=implementing by default."""
+        session = register_session(db, task="Reopen task")
+        complete_session(db, session.id)
+        result = reopen_session(db, session.id)
+        assert isinstance(result, Session)
+        assert result.completed_at is None
+        assert result.status == Status.implementing
+
+    def test_reopen_with_custom_status(self, db):
+        """reopen_session with status='waiting' sets status to waiting."""
+        session = register_session(db, task="Custom reopen task")
+        complete_session(db, session.id)
+        result = reopen_session(db, session.id, status="waiting")
+        assert result.status == Status.waiting
+        assert result.completed_at is None
