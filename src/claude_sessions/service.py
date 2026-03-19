@@ -158,7 +158,7 @@ def get_session(conn: sqlite3.Connection, id_or_prefix: str) -> SessionWithNotes
     ).fetchone()
 
     note_rows = conn.execute(
-        "SELECT id, session_id, content, created_at "
+        "SELECT id, session_id, content, created_at, repo, branch, cwd, worktree "
         "FROM note WHERE session_id = ? ORDER BY created_at ASC",
         (session_id,),
     ).fetchall()
@@ -209,11 +209,16 @@ def _row_to_session(row: sqlite3.Row) -> Session:
 
 def _row_to_note(row: sqlite3.Row) -> Note:
     """Convert a sqlite3.Row from the note table to a Note dataclass."""
+    worktree_val = row["worktree"]
     return Note(
         id=row["id"],
         session_id=row["session_id"],
         content=row["content"],
         created_at=datetime.fromisoformat(row["created_at"]),
+        repo=row["repo"],
+        branch=row["branch"],
+        cwd=row["cwd"],
+        worktree=bool(worktree_val) if worktree_val is not None else None,
     )
 
 

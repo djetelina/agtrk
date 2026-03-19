@@ -34,6 +34,10 @@ class Note:
     session_id: str
     content: str
     created_at: datetime
+    repo: Optional[str] = None
+    branch: Optional[str] = None
+    cwd: Optional[str] = None
+    worktree: Optional[bool] = None
 
 
 _MAX_SLUG_LEN = 20

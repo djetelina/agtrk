@@ -125,6 +125,10 @@ class TestNote:
             session_id="eod-day-4",
             content="Some note content",
             created_at=now,
+            repo=None,
+            branch=None,
+            cwd=None,
+            worktree=None,
         )
         defaults.update(overrides)
         return Note(**defaults)
@@ -144,3 +148,17 @@ class TestNote:
         now = datetime(2026, 3, 18, 12, 0, 0)
         n = self._make(created_at=now)
         assert n.created_at == now
+
+    def test_context_fields(self):
+        n = self._make(repo="acme/widgets", branch="main", cwd="projects/widgets", worktree=False)
+        assert n.repo == "acme/widgets"
+        assert n.branch == "main"
+        assert n.cwd == "projects/widgets"
+        assert n.worktree is False
+
+    def test_context_fields_default_none(self):
+        n = self._make()
+        assert n.repo is None
+        assert n.branch is None
+        assert n.cwd is None
+        assert n.worktree is None

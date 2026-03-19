@@ -41,6 +41,13 @@ MIGRATIONS: list[list[str]] = [
         CREATE INDEX IF NOT EXISTS idx_note_session_id ON note (session_id)
         """,
     ],
+    # Migration 2 — note context fields
+    [
+        "ALTER TABLE note ADD COLUMN repo TEXT",
+        "ALTER TABLE note ADD COLUMN branch TEXT",
+        "ALTER TABLE note ADD COLUMN cwd TEXT",
+        "ALTER TABLE note ADD COLUMN worktree INTEGER",
+    ],
 ]
 
 DB_SCHEMA_VERSION: int = len(MIGRATIONS)

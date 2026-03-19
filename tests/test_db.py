@@ -65,6 +65,53 @@ class TestSchemaCreation:
         assert row[0] == "test-id"
 
 
+class TestMigration2:
+    def test_note_has_context_columns(self, db):
+        """Migration 2 adds repo, branch, cwd, worktree columns to note table."""
+        cursor = db.execute("PRAGMA table_info(note)")
+        columns = {row[1] for row in cursor.fetchall()}
+        assert "repo" in columns
+        assert "branch" in columns
+        assert "cwd" in columns
+        assert "worktree" in columns
+
+    def test_migration_from_v1_to_v2(self, tmp_db):
+        """Existing v1 database gets migrated to v2 with new note columns."""
+        import sqlite3 as _sqlite3
+        conn = _sqlite3.connect(str(tmp_db))
+        conn.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
+        conn.execute("INSERT INTO schema_version (version) VALUES (1)")
+        conn.execute("""
+            CREATE TABLE session (
+                id TEXT PRIMARY KEY, task TEXT NOT NULL, repo TEXT,
+                status TEXT NOT NULL DEFAULT 'planning', jira TEXT,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL, completed_at TEXT
+            )
+        """)
+        conn.execute("""
+            CREATE TABLE note (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id TEXT NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+                content TEXT NOT NULL, created_at TEXT NOT NULL
+            )
+        """)
+        conn.execute("CREATE INDEX idx_note_session_id ON note (session_id)")
+        conn.commit()
+        conn.close()
+
+        conn = get_db(tmp_db)
+        cursor = conn.execute("PRAGMA table_info(note)")
+        columns = {row[1] for row in cursor.fetchall()}
+        assert "repo" in columns
+        assert "branch" in columns
+        assert "cwd" in columns
+        assert "worktree" in columns
+
+        version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == DB_SCHEMA_VERSION
+        conn.close()
+
+
 class TestMigration:
     def test_migration_runs_on_old_schema(self, tmp_db):
         """Manually create schema_version at version=0, then get_db migrates to current."""
