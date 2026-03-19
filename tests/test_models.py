@@ -42,7 +42,7 @@ class TestGenerateSlug:
     def test_truncation(self):
         long_input = "a" * 60
         result = generate_slug(long_input)
-        assert len(result) <= 40
+        assert len(result) <= 20
 
     def test_leading_trailing_hyphens_stripped(self):
         assert generate_slug("--hello world--") == "hello-world"

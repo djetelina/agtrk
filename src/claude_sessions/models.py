@@ -36,7 +36,7 @@ class Note:
     created_at: datetime
 
 
-_MAX_SLUG_LEN = 40
+_MAX_SLUG_LEN = 20
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 
