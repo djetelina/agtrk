@@ -48,7 +48,7 @@ def _time_ago(dt: datetime) -> str:
 
 def _heartbeat_tier(s: Session) -> str:
     """Return 'todo', 'fresh', 'warm', or 'stale' based on heartbeat age."""
-    if s.status == Status.todo:
+    if s.status in (Status.todo, Status.waiting, Status.done):
         return "todo"
     age = datetime.now() - s.updated_at
     if age <= FRESH_THRESHOLD:
