@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional
 
+from claude_sessions.git import detect_branch, detect_cwd, detect_repo, detect_worktree
 from claude_sessions.models import Note, Session, Status, generate_slug
 
 
@@ -27,6 +28,37 @@ class SessionWithNotes:
     updated_at: datetime
     completed_at: Optional[datetime]
     notes: list[Note]
+
+
+# ---------------------------------------------------------------------------
+# _create_note
+# ---------------------------------------------------------------------------
+
+
+def _create_note(
+    conn: sqlite3.Connection,
+    session_id: str,
+    content: str,
+    timestamp: str,
+    repo: Optional[str] = None,
+    branch: Optional[str] = None,
+) -> None:
+    """Create a note with auto-detected git context.
+
+    repo and branch are overrides — if None, auto-detection fills them.
+    cwd and worktree are always auto-detected.
+    """
+    note_repo = repo if repo is not None else detect_repo()
+    note_branch = branch if branch is not None else detect_branch()
+    note_cwd = detect_cwd()
+    note_worktree = detect_worktree()
+    worktree_int = int(note_worktree) if note_worktree is not None else None
+
+    conn.execute(
+        "INSERT INTO note (session_id, content, created_at, repo, branch, cwd, worktree) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (session_id, content, timestamp, note_repo, note_branch, note_cwd, worktree_int),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -70,10 +102,7 @@ def register_session(
     )
 
     if note is not None:
-        conn.execute(
-            "INSERT INTO note (session_id, content, created_at) VALUES (?, ?, ?)",
-            (slug, note, now),
-        )
+        _create_note(conn, slug, note, now, repo=repo)
 
     conn.commit()
 
@@ -235,6 +264,7 @@ def update_session(
     status: Optional[str] = None,
     jira: Optional[str] = None,
     note: Optional[str] = None,
+    branch: Optional[str] = None,
 ) -> Session:
     """Update session fields and optionally append a note.
 
@@ -268,10 +298,7 @@ def update_session(
     conn.execute(f"UPDATE session SET {set_clause} WHERE id = ?", values)  # noqa: S608
 
     if note is not None:
-        conn.execute(
-            "INSERT INTO note (session_id, content, created_at) VALUES (?, ?, ?)",
-            (session_id, note, now),
-        )
+        _create_note(conn, session_id, note, now, branch=branch)
 
     conn.commit()
 

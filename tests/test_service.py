@@ -1,4 +1,6 @@
 """Tests for claude_sessions.service"""
+import subprocess
+
 import pytest
 
 from claude_sessions.models import Session, Status
@@ -359,3 +361,58 @@ class TestCleanup:
             "SELECT id FROM note WHERE session_id = ?", (s.id,)
         ).fetchall()
         assert note_rows == []
+
+
+@pytest.fixture
+def git_repo(tmp_path, monkeypatch):
+    """Create a git repo with an origin remote, cd into it."""
+    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(tmp_path), "commit", "--allow-empty", "-m", "init"], check=True, capture_output=True)
+    subprocess.run(
+        ["git", "-C", str(tmp_path), "remote", "add", "origin", "https://github.com/acme/widgets.git"],
+        check=True, capture_output=True,
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("HOME", str(tmp_path.parent))
+    return tmp_path
+
+
+class TestNoteAutoDetection:
+    def test_register_note_gets_git_context(self, db, git_repo):
+        """Note created via register picks up repo/branch/cwd/worktree."""
+        session = register_session(db, task="Auto note", note="initial")
+        result = get_session(db, session.id)
+        note = result.notes[0]
+        assert note.repo == "acme/widgets"
+        assert note.branch is not None
+        assert note.cwd is not None
+        assert note.worktree is False
+
+    def test_update_note_gets_git_context(self, db, git_repo):
+        """Note created via update picks up repo/branch/cwd/worktree."""
+        session = register_session(db, task="Update auto")
+        update_session(db, session.id, note="progress")
+        result = get_session(db, session.id)
+        note = result.notes[0]
+        assert note.repo == "acme/widgets"
+        assert note.branch is not None
+
+    def test_note_branch_override(self, db, git_repo):
+        """Explicit branch overrides auto-detected value."""
+        session = register_session(db, task="Branch override")
+        update_session(db, session.id, note="custom branch", branch="custom/branch")
+        result = get_session(db, session.id)
+        note = result.notes[0]
+        assert note.branch == "custom/branch"
+
+    def test_note_without_git_repo(self, db, tmp_path, monkeypatch):
+        """Notes still work when not in a git repo."""
+        monkeypatch.chdir(tmp_path)
+        session = register_session(db, task="No git")
+        update_session(db, session.id, note="still works")
+        result = get_session(db, session.id)
+        note = result.notes[0]
+        assert note.repo is None
+        assert note.branch is None
+        assert note.cwd is not None
+        assert note.worktree is None
