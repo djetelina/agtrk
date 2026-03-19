@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-03-19
+
+### Fixed
+
+- TUI refresh no longer blinks or loses card/column focus
+- TUI table no longer scrolls horizontally — task text truncated at word boundary with `...`
+- TUI table recalculates column widths on terminal resize
+- Notes displayed newest-first in both CLI `show` and TUI detail view
+- Waiting/done sessions show correct dim dot instead of red heartbeat indicator
+- `cwd` only shown on notes when repo is from a remote (path-fallback repos already convey location)
+
+### Changed
+
+- Path-fallback repo display shows `.../parent/name` instead of just `name` for deep paths
+
 ## [0.3.0] - 2026-03-19
 
 ### Added
