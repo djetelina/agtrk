@@ -103,5 +103,8 @@ class TestRepoDisplayName:
     def test_plain_name(self):
         assert repo_display_name("widgets") == "widgets"
 
-    def test_path_fallback(self):
-        assert repo_display_name("Documents/personal/my-project") == "my-project"
+    def test_path_fallback_deep(self):
+        assert repo_display_name("Documents/personal/my-project") == ".../personal/my-project"
+
+    def test_path_fallback_two_segments(self):
+        assert repo_display_name("personal/my-project") == "my-project"

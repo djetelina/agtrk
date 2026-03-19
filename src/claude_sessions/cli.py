@@ -110,7 +110,7 @@ def show(
             console.print(f"[bold]Completed:[/bold] {session.completed_at:%Y-%m-%d %H:%M}")
         if session.notes:
             console.print("\n[bold]Notes:[/bold]")
-            for note in session.notes:
+            for note in reversed(session.notes):
                 parts = [f"{note.created_at:%Y-%m-%d %H:%M}"]
                 tag_parts = []
                 if note.repo:

@@ -93,10 +93,14 @@ def detect_worktree() -> bool | None:
 def repo_display_name(repo: str) -> str:
     """Extract short display name from a repo string.
 
-    'acme/widgets' -> 'widgets'
-    'Documents/personal/my-project' -> 'my-project'
+    'acme/widgets' -> 'widgets'  (org/repo format — just repo name)
+    'Documents/personal/my-project' -> '.../personal/my-project'  (path fallback)
+    'personal/my-project' -> 'personal/my-project'  (2 segments kept as-is)
     'widgets' -> 'widgets'
     """
-    if "/" in repo:
-        return repo.rsplit("/", 1)[-1]
-    return repo
+    parts = repo.split("/")
+    if len(parts) <= 2:
+        # org/repo or plain name — show just the repo name
+        return parts[-1]
+    # Path fallback (3+ segments) — show last 2 with ... prefix
+    return f".../{parts[-2]}/{parts[-1]}"

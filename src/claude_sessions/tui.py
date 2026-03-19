@@ -279,7 +279,9 @@ def _build_detail_content(session_id: str) -> str:
                 tag_parts.append(f"@{n.branch}")
             if tag_parts:
                 meta_parts.append(f"[dim]\\[{''.join(tag_parts)}][/dim]")
-            if n.cwd:
+            if n.cwd and n.repo and "/" in n.repo and n.repo.count("/") == 1:
+                # Show cwd only when repo is from a remote (org/repo format)
+                # — path-fallback repos already convey location
                 meta_parts.append(f"[dim italic]~/{n.cwd}[/dim italic]")
             if n.worktree:
                 meta_parts.append("\U0001f333")
@@ -552,6 +554,10 @@ class SessionDashboard(App):
 
         if restore_target is not None:
             self.call_after_refresh(restore_target.focus)
+
+    def on_resize(self) -> None:
+        if not self.kanban_view:
+            self._load_table()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if event.row_key.value is None:
