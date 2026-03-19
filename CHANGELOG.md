@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Auto-detect git repo from origin remote on `register` (falls back to path from $HOME)
+- Auto-detect git branch, cwd, and worktree status on every note
+- `--branch` flag on `update` for overriding auto-detected branch
+- Note metadata displayed in `show` command and TUI detail view
+
+### Changed
+
+- Slug IDs shortened from 40 to 20 characters
+- Repo displayed as short name (e.g., `widgets` instead of `acme/widgets`)
+- `--repo` on `register` is now optional (auto-detected)
+
 ## [0.2.0] - 2026-03-18
 
 ### Added
