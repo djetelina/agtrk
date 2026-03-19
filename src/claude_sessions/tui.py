@@ -12,6 +12,7 @@ from textual.screen import ModalScreen
 from textual.widgets import DataTable, Label, Static
 
 from claude_sessions.db import get_db
+from claude_sessions.git import repo_display_name
 from claude_sessions.models import Session, Status
 from claude_sessions.service import get_session, list_sessions
 
@@ -244,7 +245,7 @@ def _build_detail_content(session_id: str) -> str:
         "",
         f"  [dim]ID[/dim]        {session.id}",
         f"  [dim]Status[/dim]    {session.status}",
-        f"  [dim]Repo[/dim]      {session.repo or '-'}",
+        f"  [dim]Repo[/dim]      {repo_display_name(session.repo) if session.repo else '-'}",
         f"  [dim]Issue[/dim]     {session.jira or '-'}",
         f"  [dim]Created[/dim]   {_time_ago(session.created_at)}  [dim italic]{session.created_at:%Y-%m-%d %H:%M}[/dim italic]",
         f"  [dim]Heartbeat[/dim] {_time_ago(session.updated_at)}  [dim italic]{session.updated_at:%Y-%m-%d %H:%M}[/dim italic]",
@@ -256,7 +257,19 @@ def _build_detail_content(session_id: str) -> str:
         lines.append("[bold]Notes[/bold]")
         lines.append("")
         for n in session.notes:
-            lines.append(f"  [dim]{_time_ago(n.created_at)}[/dim]")
+            meta_parts = [f"[dim]{_time_ago(n.created_at)}[/dim]"]
+            tag_parts = []
+            if n.repo:
+                tag_parts.append(repo_display_name(n.repo))
+            if n.branch:
+                tag_parts.append(f"@{n.branch}")
+            if tag_parts:
+                meta_parts.append(f"[dim]\\[{''.join(tag_parts)}][/dim]")
+            if n.cwd:
+                meta_parts.append(f"[dim italic]~/{n.cwd}[/dim italic]")
+            if n.worktree:
+                meta_parts.append("\U0001f333")
+            lines.append(f"  {'  '.join(meta_parts)}")
             lines.append(f"  {n.content}")
             lines.append("")
     else:
@@ -333,7 +346,7 @@ class CardItem(Static):
         s = self.session
         task = s.task[:40] + "…" if len(s.task) > 40 else s.task
         yield Static(f"[bold]{task}[/bold]")
-        repo = s.repo or ""
+        repo = repo_display_name(s.repo) if s.repo else ""
         with Horizontal(classes="card-meta"):
             yield Static(repo, classes="card-meta-left")
             yield BreathingDot(s, classes="card-meta-right")
@@ -482,7 +495,7 @@ class SessionDashboard(App):
                 Text(s.id, style=style),
                 Text(emoji),
                 Text(task, style=style),
-                Text(s.repo or "", style=style),
+                Text(repo_display_name(s.repo) if s.repo else "", style=style),
                 Text(s.jira or "", style=style),
                 key=s.id,
             )
