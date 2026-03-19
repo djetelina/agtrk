@@ -26,17 +26,18 @@ Add this to your `CLAUDE.md` (or equivalent agent instructions) to enable sessio
 
 Use the `agtrk` CLI to track work across conversations.
 
-**Every conversation start:**
+**Every conversation start (MANDATORY — do this before any implementation work):**
 1. Run `agtrk list` to check for existing work
-2. If the user wants to resume something, match it from the list and run `agtrk show <id>` for handoff context
-3. If starting new work, run `agtrk register --task "..." [--repo ...] [--status planning]`
+2. If resuming existing work: run `agtrk show <id>` and **STOP — read the notes**. Notes contain blockers, decisions, and pending actions from prior sessions. Do not start implementation until you understand the current state. Then run `agtrk update <id> --status implementing`.
+3. If starting new work: run `agtrk register --task "..." [--status implementing]` **immediately**. Do not defer registration — if you're doing work, it must be tracked. Repo is auto-detected from git origin.
+4. Create a heartbeat cron: `CronCreate` with cron `"*/10 * * * *"` and prompt `"Run: agtrk heartbeat <session-id>"`. Store the job ID for cleanup.
 
 **During work:**
-- `agtrk update <id> --note "..."` at natural checkpoints (PR opened, phase change, blocker hit)
+- `agtrk update <id> --note "..."` at natural checkpoints (each apply, config decision, phase change, blocker hit) — do this proactively, not only when asked
 - `agtrk update <id> --status <planning|implementing|waiting>` when status changes
+- `agtrk update <id> --task "..."` to update the task description
 - `agtrk update <id> --issue PLAT-1234` to associate an issue/ticket
-- `agtrk update <id> --repo <repo-name>` to set or change repo association
-- Create a heartbeat cron: `CronCreate` with cron `"*/10 * * * *"` and prompt `"Run: agtrk heartbeat <session-id>"`. Store the job ID for cleanup.
+- `agtrk update <id> --repo <repo-name>` to override auto-detected repo
 
 **On completion:**
 - Delete the heartbeat cron with `CronDelete`
