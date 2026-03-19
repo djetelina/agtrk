@@ -7,6 +7,7 @@ from rich.console import Console
 from rich.table import Table
 
 from claude_sessions.db import get_db
+from claude_sessions.git import detect_repo, repo_display_name
 from claude_sessions.service import (
     cleanup,
     complete_session,
@@ -71,7 +72,7 @@ def _print_list(archived: bool, show_all: bool, verbose: bool = False) -> None:
                 f"{s.updated_at:%Y-%m-%d %H:%M}",
             ]
             if verbose:
-                row.extend([s.repo or "", s.jira or ""])
+                row.extend([repo_display_name(s.repo) if s.repo else "", s.jira or ""])
             table.add_row(*row)
         console.print(table)
     finally:
@@ -101,7 +102,7 @@ def show(
         session = get_session(conn, id_or_prefix=id)
         console.print(f"[bold]Task:[/bold] {session.task}")
         console.print(f"[bold]Status:[/bold] {session.status}")
-        console.print(f"[bold]Repo:[/bold] {session.repo or '-'}")
+        console.print(f"[bold]Repo:[/bold] {repo_display_name(session.repo) if session.repo else '-'}")
         console.print(f"[bold]Issue:[/bold] {session.jira or '-'}")
         console.print(f"[bold]Created:[/bold] {session.created_at:%Y-%m-%d %H:%M}")
         console.print(f"[bold]Updated:[/bold] {session.updated_at:%Y-%m-%d %H:%M}")
@@ -110,7 +111,18 @@ def show(
         if session.notes:
             console.print("\n[bold]Notes:[/bold]")
             for note in session.notes:
-                console.print(f"  {note.created_at:%Y-%m-%d %H:%M}  {note.content}")
+                parts = [f"{note.created_at:%Y-%m-%d %H:%M}"]
+                tag_parts = []
+                if note.repo:
+                    tag_parts.append(repo_display_name(note.repo))
+                if note.branch:
+                    tag_parts.append(f"@{note.branch}")
+                if tag_parts:
+                    parts.append(f"[{''.join(tag_parts)}]")
+                if note.worktree:
+                    parts.append("\U0001f333")
+                console.print(f"  {' '.join(parts)}")
+                console.print(f"  {note.content}")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
@@ -148,15 +160,16 @@ def cleanup_cmd(
 @app.command(rich_help_panel="Agent commands")
 def register(
     task: str = typer.Option(..., "--task", help="Task description"),
-    repo: Optional[str] = typer.Option(None, "--repo", help="Repository name"),
+    repo: Optional[str] = typer.Option(None, "--repo", help="Repository name (auto-detected)"),
     status: str = typer.Option("planning", "--status", help="Initial status"),
     jira: Optional[str] = typer.Option(None, "--jira", "--issue", help="Issue/ticket key"),
     note: Optional[str] = typer.Option(None, "--note", help="Initial note"),
 ) -> None:
     """Register a new session."""
+    resolved_repo = repo if repo is not None else detect_repo()
     conn = get_db()
     try:
-        session = register_session(conn, task=task, repo=repo, status=status, jira=jira, note=note)
+        session = register_session(conn, task=task, repo=resolved_repo, status=status, jira=jira, note=note)
         console.print(f"Registered session: {session.id}")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -173,11 +186,12 @@ def update(
     status: Optional[str] = typer.Option(None, "--status", help="New status"),
     jira: Optional[str] = typer.Option(None, "--jira", "--issue", help="Issue/ticket key"),
     note: Optional[str] = typer.Option(None, "--note", help="Note to append"),
+    branch: Optional[str] = typer.Option(None, "--branch", help="Branch override for note"),
 ) -> None:
     """Update a session."""
     conn = get_db()
     try:
-        update_session(conn, id_or_prefix=id, task=task, repo=repo, status=status, jira=jira, note=note)
+        update_session(conn, id_or_prefix=id, task=task, repo=repo, status=status, jira=jira, note=note, branch=branch)
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)

@@ -8,9 +8,14 @@ runner = CliRunner()
 
 
 def test_register(tmp_db_env):
-    result = runner.invoke(app, ["register", "--task", "EoD Day 4", "--repo", "phrase"])
+    result = runner.invoke(app, ["register", "--task", "EoD Day 4"])
     assert result.exit_code == 0
     assert "eod-day-4" in result.stdout
+
+
+def test_register_with_explicit_repo(tmp_db_env):
+    result = runner.invoke(app, ["register", "--task", "Explicit repo test", "--repo", "my-repo"])
+    assert result.exit_code == 0
 
 
 def test_register_with_status(tmp_db_env):
