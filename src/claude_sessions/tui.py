@@ -46,6 +46,20 @@ def _time_ago(dt: datetime) -> str:
     return f"{days}d ago"
 
 
+def _truncate(text: str, width: int) -> str:
+    """Truncate text to width, breaking at word boundary, appending '...' if cut."""
+    if len(text) <= width:
+        return text
+    cut = width - 3  # room for "..."
+    if cut <= 0:
+        return text[:width]
+    # Find last space before the cut point
+    space = text.rfind(" ", 0, cut + 1)
+    if space > 0:
+        return text[:space] + "..."
+    return text[:cut] + "..."
+
+
 def _heartbeat_tier(s: Session) -> str:
     """Return 'todo', 'fresh', 'warm', or 'stale' based on heartbeat age."""
     if s.status in (Status.todo, Status.waiting, Status.done):
@@ -344,7 +358,7 @@ class CardItem(Static):
 
     def compose(self) -> ComposeResult:
         s = self.session
-        task = s.task[:40] + "…" if len(s.task) > 40 else s.task
+        task = _truncate(s.task, 40)
         yield Static(f"[bold]{task}[/bold]")
         repo = repo_display_name(s.repo) if s.repo else ""
         with Horizontal(classes="card-meta"):
@@ -498,7 +512,7 @@ class SessionDashboard(App):
             else:
                 style = ""
             emoji = STATUS_EMOJI.get(s.status, "")
-            task = s.task[:task_width] + "…" if len(s.task) > task_width else s.task
+            task = _truncate(s.task, task_width)
             table.add_row(
                 Text.from_markup(_status_dot(s)),
                 Text(s.id, style=style),
