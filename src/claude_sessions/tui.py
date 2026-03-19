@@ -480,11 +480,15 @@ class SessionDashboard(App):
     def _load_table(self) -> None:
         table = self.query_one("#table-view", DataTable)
         table.clear(columns=True)
+        # Fixed content: dot(1) + ID(20) + emoji(2) + Repo(16) + Issue(10) = 49
+        # DataTable overhead: 2 chars padding * 6 cols + 1 cursor gutter = 13
+        fixed_width = 62
+        task_width = max(20, self.size.width - fixed_width)
 
         table.add_column("", width=1)
         table.add_column("ID", width=20)
         table.add_column("", width=2)
-        table.add_column("Task")
+        table.add_column("Task", width=task_width)
         table.add_column("Repo", width=16)
         table.add_column("Issue", width=10)
 
@@ -494,7 +498,7 @@ class SessionDashboard(App):
             else:
                 style = ""
             emoji = STATUS_EMOJI.get(s.status, "")
-            task = s.task
+            task = s.task[:task_width] + "…" if len(s.task) > task_width else s.task
             table.add_row(
                 Text.from_markup(_status_dot(s)),
                 Text(s.id, style=style),
