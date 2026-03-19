@@ -256,7 +256,7 @@ def _build_detail_content(session_id: str) -> str:
         lines.append("")
         lines.append("[bold]Notes[/bold]")
         lines.append("")
-        for n in session.notes:
+        for n in reversed(session.notes):
             meta_parts = [f"[dim]{_time_ago(n.created_at)}[/dim]"]
             tag_parts = []
             if n.repo:
@@ -462,11 +462,19 @@ class SessionDashboard(App):
     def _load_data(self) -> None:
         conn = get_db()
         try:
-            self._sessions = list_sessions(conn, include_archived=self.show_archived)
+            new_sessions = list_sessions(conn, include_archived=self.show_archived)
         finally:
             conn.close()
-        self._load_table()
-        self._load_board()
+        old_ids = [s.id for s in self._sessions]
+        new_ids = [s.id for s in new_sessions]
+        changed = old_ids != new_ids or any(
+            (a.status, a.updated_at, a.task, a.repo) != (b.status, b.updated_at, b.task, b.repo)
+            for a, b in zip(self._sessions, new_sessions)
+        )
+        self._sessions = new_sessions
+        if changed:
+            self._load_table()
+            self._load_board()
         self._refresh_header()
 
     def _load_table(self) -> None:
@@ -502,17 +510,33 @@ class SessionDashboard(App):
 
     def _load_board(self) -> None:
         board = self.query_one("#board", Horizontal)
+        # Track focused card to restore after rebuild
+        focused = self.focused
+        focused_id = focused.session.id if isinstance(focused, CardItem) else None
+        focused_col_status = None
+        if isinstance(focused, CardColumn):
+            focused_col_status = focused.status
+
         board.remove_children()
         groups = _group_by_status(self._sessions, self.show_archived)
         first = True
+        restore_target = None
         for status, items in groups.items():
             col = CardColumn(status)
             if first:
                 col.add_class("first-col")
                 first = False
+            if focused_col_status == status:
+                restore_target = col
             board.mount(col)
             for s in items:
-                col.mount(CardItem(s))
+                card = CardItem(s)
+                col.mount(card)
+                if s.id == focused_id:
+                    restore_target = card
+
+        if restore_target is not None:
+            self.call_after_refresh(restore_target.focus)
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
         if event.row_key.value is None:
