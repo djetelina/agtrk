@@ -189,7 +189,7 @@ If you catch yourself thinking any of these, stop and register:
 
 {cron_prompt}
 
-On completion:
+On completion (requires user confirmation — do NOT complete on your own):
 - Delete the heartbeat cron with CronDelete
 - Run `agtrk complete <id>`
 
