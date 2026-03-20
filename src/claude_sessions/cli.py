@@ -20,6 +20,7 @@ from claude_sessions.service import (
     list_sessions,
     register_session,
     reopen_session,
+    search_sessions,
     update_session,
 )
 
@@ -50,9 +51,14 @@ def _build_session_table(sessions: list) -> Table:
     table.add_column("ID", style="bold")
     table.add_column("Status")
     table.add_column("Task")
-    table.add_column("Updated")
+    table.add_column("Repo")
+    table.add_column("Issue")
     for s in sessions:
-        table.add_row(s.id, str(s.status), s.task, f"{s.updated_at:%Y-%m-%d %H:%M}")
+        table.add_row(
+            s.id, str(s.status), s.task,
+            repo_display_name(s.repo) if s.repo else "",
+            s.issue or "",
+        )
     return table
 
 
@@ -74,17 +80,18 @@ def _print_list(archived: bool, show_all: bool, verbose: bool = False) -> None:
         console.print("No archived sessions" if archived else "No active sessions")
         return
     if verbose:
-        table = Table()
+        table = Table(show_header=True)
         table.add_column("ID", style="bold")
         table.add_column("Status")
         table.add_column("Task")
-        table.add_column("Updated")
         table.add_column("Repo")
         table.add_column("Issue")
+        table.add_column("Updated")
         for s in sessions:
             table.add_row(
-                s.id, str(s.status), s.task, f"{s.updated_at:%Y-%m-%d %H:%M}",
+                s.id, str(s.status), s.task,
                 repo_display_name(s.repo) if s.repo else "", s.issue or "",
+                f"{s.updated_at:%Y-%m-%d %H:%M}",
             )
     else:
         table = _build_session_table(sessions)
@@ -143,6 +150,28 @@ def show(
 
 
 @app.command()
+def search(
+    query: str = typer.Argument(help="Search term"),
+    all_sessions: bool = typer.Option(False, "--all", help="Include archived sessions"),
+) -> None:
+    """Search across session tasks and notes."""
+    with open_db() as conn:
+        results = search_sessions(conn, query, include_archived=all_sessions)
+    if not results:
+        console.print(f"No matches for '{query}'")
+        return
+    for swn in results:
+        task_match = query.lower() in swn.task.lower()
+        status_str = f"[dim]{swn.status}[/dim]"
+        console.print(f"[bold]{swn.id}[/bold] {status_str} — {swn.task}")
+        if task_match and not swn.notes:
+            console.print("  [dim](task match)[/dim]")
+        for note in swn.notes:
+            console.print(f"  {note.created_at:%Y-%m-%d %H:%M} {note.content}")
+        console.print()
+
+
+@app.command()
 def tui() -> None:
     """Open the TUI dashboard."""
     from claude_sessions.tui import run_tui
@@ -188,14 +217,18 @@ been created or linked? If so, run `agtrk update <id> --task "..." --issue PLAT-
 If nothing changed, skip."""
 
 INJECT_INSTRUCTIONS = """\
-DO NOT respond to the user until you have done one of the following:
-- Resuming existing work: run `agtrk show <id>` and read the notes, then run `agtrk update <id> --status implementing`
-- Starting new work: run `agtrk register --task '...' --id <short-slug> --status implementing`
+DO NOT respond to the user until you have done ALL of the following:
+1. Register or resume:
+   - Resuming existing work: run `agtrk show <id>` and read the notes, then run `agtrk update <id> --status implementing`
+   - Starting new work: run `agtrk register --task '...' --id <short-slug> --status implementing`
+2. Create a heartbeat cron: CronCreate with cron '*/30 * * * *' and the prompt between the markers:
+
+--- BEGIN CRON PROMPT ---
+{cron_prompt}
+--- END CRON PROMPT ---
 
 This is a gate on your response, not a side task. You cannot answer, ask clarifying questions, \
-read code, or invoke skills until tracking is done.
-
-Then create a heartbeat cron: CronCreate with cron '*/30 * * * *' and the following prompt:
+read code, or invoke skills until both steps are done.
 
 If you catch yourself thinking any of these, stop and register:
 
@@ -206,14 +239,16 @@ If you catch yourself thinking any of these, stop and register:
 | "User only asked a question" | Questions lead to work. Register first. |
 | "I need to understand the task first" | agtrk register accepts updates. Register now, refine later. |
 
-{cron_prompt}
-
 On completion (requires user confirmation — do NOT complete on your own):
 - Delete the heartbeat cron with CronDelete
 - Run `agtrk complete <id> --summary "Brief description of what was accomplished"`
 
 Corrections:
 - `agtrk reopen <id>` to reactivate a completed session
+
+Search:
+- `agtrk search <query>` to find sessions by task or note content (case-insensitive)
+- `agtrk search <query> --all` to include archived sessions
 
 Backlog:
 - `agtrk register --task "..." --status todo` for work you notice but shouldn't act on now""".format(

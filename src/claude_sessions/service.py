@@ -461,6 +461,61 @@ def cleanup(conn: sqlite3.Connection, older_than_days: int = 30) -> int:
 # ---------------------------------------------------------------------------
 
 
+def search_sessions(
+    conn: sqlite3.Connection,
+    query: str,
+    include_archived: bool = False,
+) -> list[SessionWithNotes]:
+    """Search sessions by task/note content.
+
+    Returns sessions where the query matches the task description or any note
+    content (case-insensitive LIKE). Each returned SessionWithNotes contains
+    only the matching notes.
+
+    Args:
+        conn: Open database connection.
+        query: Search term (matched with SQL LIKE %query%).
+        include_archived: When True, also search completed sessions.
+
+    Returns:
+        A list of :class:`SessionWithNotes`, each with only matching notes.
+    """
+    like_pattern = f"%{query}%"
+
+    # Find session IDs where task or any note matches
+    archive_filter = "" if include_archived else "AND s.completed_at IS NULL"
+    id_rows = conn.execute(
+        "SELECT DISTINCT s.id "
+        "FROM session s "
+        "LEFT JOIN note n ON n.session_id = s.id "
+        "WHERE (s.task LIKE ? COLLATE NOCASE OR n.content LIKE ? COLLATE NOCASE) "
+        f"{archive_filter} ",  # noqa: S608
+        (like_pattern, like_pattern),
+    ).fetchall()
+
+    # Fetch full session data for each match
+    matched_ids = [r["id"] for r in id_rows]
+    rows = [
+        _fetch_session(conn, sid) for sid in matched_ids
+    ]
+
+    results = []
+    for session in sorted(rows, key=lambda s: s.updated_at, reverse=True):
+        # Fetch only matching notes for this session
+        note_rows = conn.execute(
+            "SELECT id, session_id, content, created_at, repo, branch, cwd, worktree "
+            "FROM note WHERE session_id = ? AND content LIKE ? COLLATE NOCASE "
+            "ORDER BY created_at ASC",
+            (session.id, like_pattern),
+        ).fetchall()
+        results.append(SessionWithNotes(
+            session=session,
+            notes=[_row_to_note(nr) for nr in note_rows],
+        ))
+
+    return results
+
+
 def delete_session(conn: sqlite3.Connection, id_or_prefix: str) -> str:
     """Delete a session and its notes.
 

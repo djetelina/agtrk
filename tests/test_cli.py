@@ -118,6 +118,22 @@ def test_delete(tmp_db_env):
     assert "Delete me" not in list_result.stdout
 
 
+def test_search(tmp_db_env):
+    reg = runner.invoke(app, ["register", "--task", "Auth migration"])
+    session_id = _extract_id(reg.stdout, "auth-migration")
+    runner.invoke(app, ["update", session_id, "--note", "deployed new auth flow"])
+    result = runner.invoke(app, ["search", "auth"])
+    assert result.exit_code == 0
+    assert "auth-migration" in result.stdout
+    assert "deployed new auth flow" in result.stdout
+
+
+def test_search_no_results(tmp_db_env):
+    result = runner.invoke(app, ["search", "nonexistent"])
+    assert result.exit_code == 0
+    assert "No matches" in result.stdout
+
+
 def test_not_found(tmp_db_env):
     result = runner.invoke(app, ["show", "nonexistent"])
     assert result.exit_code != 0

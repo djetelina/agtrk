@@ -11,6 +11,7 @@ from claude_sessions.service import (
     list_sessions,
     register_session,
     reopen_session,
+    search_sessions,
     update_session,
 )
 
@@ -359,6 +360,74 @@ class TestCleanup:
             "SELECT id FROM note WHERE session_id = ?", (s.id,)
         ).fetchall()
         assert note_rows == []
+
+
+class TestSearchSessions:
+    def test_search_by_note_content(self, db):
+        """search finds sessions with matching note content."""
+        s = register_session(db, task="Some task")
+        update_session(db, s.id, note="deployed to production")
+        results = search_sessions(db, "production")
+        assert len(results) == 1
+        assert results[0].id == s.id
+        assert len(results[0].notes) == 1
+
+    def test_search_by_task(self, db):
+        """search finds sessions with matching task description."""
+        register_session(db, task="Fix authentication bug")
+        results = search_sessions(db, "authentication")
+        assert len(results) == 1
+        assert "authentication" in results[0].task.lower()
+        assert results[0].notes == []
+
+    def test_search_case_insensitive(self, db):
+        """search is case-insensitive."""
+        s = register_session(db, task="Some task")
+        update_session(db, s.id, note="Deployed to PRODUCTION")
+        results = search_sessions(db, "production")
+        assert len(results) == 1
+
+    def test_search_no_matches(self, db):
+        """search returns empty list when nothing matches."""
+        register_session(db, task="Unrelated task")
+        results = search_sessions(db, "nonexistent")
+        assert results == []
+
+    def test_search_excludes_archived_by_default(self, db):
+        """search excludes completed sessions by default."""
+        s = register_session(db, task="Done task")
+        update_session(db, s.id, note="some searchable content")
+        complete_session(db, s.id)
+        results = search_sessions(db, "searchable")
+        assert results == []
+
+    def test_search_includes_archived_when_requested(self, db):
+        """search includes completed sessions with include_archived=True."""
+        s = register_session(db, task="Done task")
+        update_session(db, s.id, note="some searchable content")
+        complete_session(db, s.id)
+        results = search_sessions(db, "searchable", include_archived=True)
+        assert len(results) == 1
+
+    def test_search_returns_only_matching_notes(self, db):
+        """search only includes notes that match, not all session notes."""
+        s = register_session(db, task="Multi note task")
+        update_session(db, s.id, note="fixed the login bug")
+        update_session(db, s.id, note="unrelated progress update")
+        update_session(db, s.id, note="login page still flaky")
+        results = search_sessions(db, "login")
+        assert len(results) == 1
+        assert len(results[0].notes) == 2
+        assert all("login" in n.content.lower() for n in results[0].notes)
+
+    def test_search_multiple_sessions(self, db):
+        """search returns multiple matching sessions."""
+        s1 = register_session(db, task="Task alpha")
+        s2 = register_session(db, task="Task beta")
+        update_session(db, s1.id, note="deploy step one")
+        update_session(db, s2.id, note="deploy step two")
+        results = search_sessions(db, "deploy")
+        assert len(results) == 2
 
 
 class TestNoteAutoDetection:

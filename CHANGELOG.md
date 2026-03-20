@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-03-20
+
+### Added
+
+- `agtrk search <query>` command — case-insensitive search across session tasks and note content
+  - `--all` flag to include archived sessions
+  - Returns only matching notes per session, not all notes
+- Repo and Issue columns in default `list` and `inject` tables (previously only in `list -v`)
+- Search command documented in inject instructions
+
+### Changed
+
+- Default table (`list`, `inject`) no longer shows Updated column — available via `list -v`
+- Inject gate now requires both session registration AND heartbeat cron before responding
+- Cron prompt delimited with markers so agents don't conflate it with surrounding instructions
+
 ## [0.6.1] - 2026-03-20
 
 ### Fixed
