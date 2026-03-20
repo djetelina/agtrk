@@ -259,7 +259,11 @@ def _build_detail_content(session_id: str) -> str:
         f"  [dim]Heartbeat[/dim] {_time_ago(session.updated_at)}  [dim italic]{session.updated_at:%Y-%m-%d %H:%M}[/dim italic]",
     ]
     if session.completed_at:
-        lines.append(f"  [dim]Done[/dim]     {_time_ago(session.completed_at)}  [dim italic]{session.completed_at:%Y-%m-%d %H:%M}[/dim italic]")
+        lines.append(f"  [dim]Done[/dim]      {_time_ago(session.completed_at)}  [dim italic]{session.completed_at:%Y-%m-%d %H:%M}[/dim italic]")
+    if session.summary:
+        lines.append("")
+        lines.append("[bold]Summary[/bold]")
+        lines.append(f"  {session.summary}")
     if session.notes:
         lines.append("")
         lines.append("[bold]Notes[/bold]")

@@ -220,7 +220,7 @@ INJECT_INSTRUCTIONS = """\
 DO NOT respond to the user until you have done ALL of the following:
 1. Register or resume:
    - Resuming existing work: run `agtrk show <id>` and read the notes, then run `agtrk update <id> --status implementing`
-   - Starting new work: run `agtrk register --task '...' --id <short-slug> --status implementing`
+   - Starting new work: run `agtrk register --task '...' --id <short-slug> --status <todo|planning|implementing>`
 2. Create a heartbeat cron: CronCreate with cron '*/30 * * * *' and the prompt between the markers:
 
 --- BEGIN CRON PROMPT ---

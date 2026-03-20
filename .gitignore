@@ -11,3 +11,6 @@ wheels/
 
 # Superpowers skill artifacts
 docs/superpowers/
+
+# Local settings
+settings.local
