@@ -17,5 +17,9 @@ This installs SessionStart and PreCompact hooks into `~/.claude/settings.json`. 
 agtrk                # list active sessions
 agtrk show <id>      # session details + notes
 agtrk tui            # terminal dashboard (table + kanban views)
+agtrk list           # list with filters (--archived, --all, --verbose)
+agtrk install        # add hooks to ~/.claude/settings.json
+agtrk uninstall      # remove hooks from ~/.claude/settings.json
+agtrk cleanup        # delete archived sessions older than 30 days
 agtrk --help         # all commands
 ```
