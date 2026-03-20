@@ -158,6 +158,7 @@ def test_install_fresh(tmp_db_env, tmp_path):
     for event in ("SessionStart", "PreCompact"):
         cmds = [h["command"] for entry in hooks[event] for h in entry["hooks"]]
         assert any("agtrk inject" in c for c in cmds)
+    assert "Bash(agtrk:*)" in settings["permissions"]["allow"]
 
 
 def test_install_idempotent(tmp_db_env, tmp_path):
@@ -168,7 +169,8 @@ def test_install_idempotent(tmp_db_env, tmp_path):
             "SessionStart": [{"hooks": [
                 {"type": "command", "command": "agtrk inject", "timeout": 10}
             ]}]
-        }
+        },
+        "permissions": {"allow": ["Bash(agtrk:*)"]}
     }))
 
     result = runner.invoke(app, ["install", "--settings", str(settings_path)])
@@ -181,6 +183,7 @@ def test_install_idempotent(tmp_db_env, tmp_path):
     ]
     assert len(agtrk_entries) == 1
     assert "PreCompact" in settings["hooks"]
+    assert settings["permissions"]["allow"].count("Bash(agtrk:*)") == 1
 
 
 def test_install_preserves_other_hooks(tmp_db_env, tmp_path):

@@ -8,3 +8,6 @@ wheels/
 
 # Virtual environments
 .venv
+
+# Superpowers skill artifacts
+docs/superpowers/

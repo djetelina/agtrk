@@ -169,9 +169,13 @@ been created or linked? If so, run `agtrk update <id> --task "..." --issue PLAT-
 If nothing changed, skip."""
 
 INJECT_INSTRUCTIONS = """\
-You MUST review this before doing anything else. If resuming existing work, \
-run `agtrk show <id>` and read the notes, then run `agtrk update <id> --status implementing`. \
-If starting new work, run `agtrk register --task '...' --status implementing` immediately. \
+DO NOT respond to the user until you have done one of the following:
+- Resuming existing work: run `agtrk show <id>` and read the notes, then run `agtrk update <id> --status implementing`
+- Starting new work: run `agtrk register --task '...' --status implementing`
+
+This is a gate on your response, not a side task. You cannot answer, ask clarifying questions, \
+read code, or invoke skills until tracking is done.
+
 Then create a heartbeat cron: CronCreate with cron '*/30 * * * *' and the following prompt:
 
 If you catch yourself thinking any of these, stop and register:
@@ -270,6 +274,12 @@ def install(
         )
         if not already:
             entries.append(AGTRK_HOOK_ENTRY)
+
+    # Ensure agtrk commands are allowed without prompting
+    AGTRK_PERMISSION = "Bash(agtrk:*)"
+    allow = data.setdefault("permissions", {}).setdefault("allow", [])
+    if AGTRK_PERMISSION not in allow:
+        allow.append(AGTRK_PERMISSION)
 
     settings_path.write_text(json.dumps(data, indent=2) + "\n")
     console.print(f"Installed agtrk hooks into {settings_path}")
