@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `agtrk inject` command — outputs session context and usage instructions for agent hooks
+- `agtrk install` command — patches `~/.claude/settings.json` with SessionStart + PreCompact hooks (idempotent)
+
+### Changed
+
+- Session tracking instructions no longer need to be in CLAUDE.md — `agtrk inject` is the single source of truth
+
 ## [0.3.1] - 2026-03-19
 
 ### Fixed
