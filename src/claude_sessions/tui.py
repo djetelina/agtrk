@@ -17,8 +17,8 @@ from claude_sessions.models import Session, Status
 from claude_sessions.service import get_session, list_sessions
 
 REFRESH_INTERVAL = 30
-FRESH_THRESHOLD = timedelta(minutes=15)
-STALE_THRESHOLD = timedelta(minutes=100)
+FRESH_THRESHOLD = timedelta(minutes=35)
+STALE_THRESHOLD = timedelta(minutes=65)
 
 STATUS_EMOJI = {
     Status.todo: "📋",

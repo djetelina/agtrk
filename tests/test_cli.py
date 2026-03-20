@@ -138,7 +138,9 @@ def test_inject_with_sessions(tmp_db_env):
     assert "agtrk register" in result.stdout
     assert "agtrk update" in result.stdout
     assert "agtrk complete" in result.stdout
-    assert "heartbeat" in result.stdout
+    assert "agtrk heartbeat" in result.stdout
+    assert "*/30" in result.stdout
+    assert "future session" in result.stdout
 
 
 def test_install_fresh(tmp_db_env, tmp_path):

@@ -157,29 +157,36 @@ def cleanup_cmd(
         conn.close()
 
 
+INJECT_CRON_PROMPT = """\
+Run: `agtrk heartbeat <id>`
+
+Then reflect: since the last note, has there been meaningful progress, a decision, \
+a blocker, or a status change? What would help a future session pick up this work? \
+If anything comes to mind, run `agtrk update <id> --note "..." --status <status>`.
+
+Also check: does the task description still match what you're doing? Has an issue/ticket \
+been created or linked? If so, run `agtrk update <id> --task "..." --issue PLAT-1234`. \
+If nothing changed, skip."""
+
 INJECT_INSTRUCTIONS = """\
 You MUST review this before doing anything else. If resuming existing work, \
-run agtrk show <id> and read the notes, then run agtrk update <id> --status implementing. \
-If starting new work, run agtrk register --task '...' --status implementing immediately. \
-Then create a heartbeat cron: CronCreate with cron '*/10 * * * *' and prompt \
-'Run: agtrk heartbeat <session-id>'.
+run `agtrk show <id>` and read the notes, then run `agtrk update <id> --status implementing`. \
+If starting new work, run `agtrk register --task '...' --status implementing` immediately. \
+Then create a heartbeat cron: CronCreate with cron '*/30 * * * *' and the following prompt:
 
-During work:
-- agtrk update <id> --note "..." at natural checkpoints — do this proactively
-- agtrk update <id> --status <planning|implementing|waiting> when status changes
-- agtrk update <id> --task "..." to update the task description
-- agtrk update <id> --issue PLAT-1234 to associate an issue/ticket
-- agtrk update <id> --repo <repo-name> to override auto-detected repo
+{cron_prompt}
 
 On completion:
 - Delete the heartbeat cron with CronDelete
-- Run agtrk complete <id>
+- Run `agtrk complete <id>`
 
 Corrections:
-- agtrk reopen <id> to reactivate a completed session
+- `agtrk reopen <id>` to reactivate a completed session
 
 Backlog:
-- agtrk register --task "..." --status todo for work you notice but shouldn't act on now"""
+- `agtrk register --task "..." --status todo` for work you notice but shouldn't act on now""".format(
+    cron_prompt=INJECT_CRON_PROMPT
+)
 
 
 # --- Agent commands ---

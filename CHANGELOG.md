@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Session tracking instructions no longer need to be in CLAUDE.md — `agtrk inject` is the single source of truth
+- Heartbeat cron interval changed from 10 to 30 minutes, now also prompts agent to reflect and add notes
+- TUI heartbeat thresholds adjusted: fresh < 35min, warm 35–65min, stale > 65min
 
 ## [0.3.1] - 2026-03-19
 
