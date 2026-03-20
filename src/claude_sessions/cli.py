@@ -285,6 +285,39 @@ def install(
     console.print(f"Installed agtrk hooks into {settings_path}")
 
 
+@app.command()
+def uninstall(
+    settings: str = typer.Option(
+        str(Path.home() / ".claude" / "settings.json"),
+        "--settings",
+        help="Path to Claude Code settings.json",
+    ),
+) -> None:
+    """Remove agtrk hooks from Claude Code settings."""
+    settings_path = Path(settings)
+
+    if not settings_path.exists():
+        console.print("Nothing to uninstall — settings file not found.")
+        return
+
+    data = json.loads(settings_path.read_text())
+
+    hooks = data.get("hooks", {})
+    for event in ("SessionStart", "PreCompact"):
+        if event in hooks:
+            hooks[event] = [
+                entry for entry in hooks[event]
+                if not any("agtrk inject" in h.get("command", "") for h in entry.get("hooks", []))
+            ]
+
+    allow = data.get("permissions", {}).get("allow", [])
+    if "Bash(agtrk:*)" in allow:
+        allow.remove("Bash(agtrk:*)")
+
+    settings_path.write_text(json.dumps(data, indent=2) + "\n")
+    console.print(f"Removed agtrk hooks from {settings_path}")
+
+
 @app.command(rich_help_panel="Agent commands")
 def register(
     task: str = typer.Option(..., "--task", help="Task description"),

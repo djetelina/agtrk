@@ -204,3 +204,46 @@ def test_install_preserves_other_hooks(tmp_db_env, tmp_path):
     cmds = [h["command"] for entry in settings["hooks"]["SessionStart"] for h in entry["hooks"]]
     assert "some-other-tool prime" in cmds
     assert any("agtrk inject" in c for c in cmds)
+
+
+def test_uninstall(tmp_db_env, tmp_path):
+    settings_path = tmp_path / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    # Start with a fully installed state plus other hooks
+    settings_path.write_text(json.dumps({
+        "hooks": {
+            "SessionStart": [
+                {"hooks": [{"type": "command", "command": "some-other-tool prime"}]},
+                {"hooks": [{"type": "command", "command": "agtrk inject", "timeout": 10}]},
+            ],
+            "PreCompact": [
+                {"hooks": [{"type": "command", "command": "agtrk inject", "timeout": 10}]},
+            ],
+        },
+        "permissions": {"allow": ["Read", "Bash(agtrk:*)", "Grep"]}
+    }))
+
+    result = runner.invoke(app, ["uninstall", "--settings", str(settings_path)])
+    assert result.exit_code == 0
+
+    settings = json.loads(settings_path.read_text())
+    # agtrk hooks removed, other hooks preserved
+    cmds = [h["command"] for entry in settings["hooks"]["SessionStart"] for h in entry["hooks"]]
+    assert "some-other-tool prime" in cmds
+    assert not any("agtrk inject" in c for c in cmds)
+    # PreCompact should be empty or gone
+    pre_compact_cmds = [h["command"] for entry in settings["hooks"].get("PreCompact", []) for h in entry["hooks"]]
+    assert not any("agtrk inject" in c for c in pre_compact_cmds)
+    # Permission removed, others preserved
+    assert "Bash(agtrk:*)" not in settings["permissions"]["allow"]
+    assert "Read" in settings["permissions"]["allow"]
+    assert "Grep" in settings["permissions"]["allow"]
+
+
+def test_uninstall_idempotent(tmp_db_env, tmp_path):
+    settings_path = tmp_path / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(json.dumps({"hooks": {}, "permissions": {"allow": []}}))
+
+    result = runner.invoke(app, ["uninstall", "--settings", str(settings_path)])
+    assert result.exit_code == 0
