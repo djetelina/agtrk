@@ -112,6 +112,8 @@ def show(
         console.print(f"[bold]Updated:[/bold] {session.updated_at:%Y-%m-%d %H:%M}")
         if session.completed_at:
             console.print(f"[bold]Completed:[/bold] {session.completed_at:%Y-%m-%d %H:%M}")
+        if session.summary:
+            console.print(f"\n[bold]Summary:[/bold] {session.summary}")
         if session.notes:
             console.print("\n[bold]Notes:[/bold]")
             for note in reversed(session.notes):
@@ -208,7 +210,7 @@ If you catch yourself thinking any of these, stop and register:
 
 On completion (requires user confirmation — do NOT complete on your own):
 - Delete the heartbeat cron with CronDelete
-- Run `agtrk complete <id>`
+- Run `agtrk complete <id> --summary "Brief description of what was accomplished"`
 
 Corrections:
 - `agtrk reopen <id>` to reactivate a completed session
@@ -397,11 +399,12 @@ def heartbeat_cmd(
 @app.command(rich_help_panel="Agent commands")
 def complete(
     id: str = typer.Argument(help="Session ID or prefix"),
+    summary: Optional[str] = typer.Option(None, "--summary", help="Summary of what was accomplished"),
 ) -> None:
     """Mark a session as done."""
     conn = get_db()
     try:
-        complete_session(conn, id_or_prefix=id)
+        complete_session(conn, id_or_prefix=id, summary=summary)
         console.print(f"Completed session: {id}")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")

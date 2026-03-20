@@ -26,6 +26,7 @@ class Session:
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime]
+    summary: Optional[str] = None
 
 
 @dataclass

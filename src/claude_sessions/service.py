@@ -27,6 +27,7 @@ class SessionWithNotes:
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime]
+    summary: Optional[str]
     notes: list[Note]
 
 
@@ -183,7 +184,7 @@ def get_session(conn: sqlite3.Connection, id_or_prefix: str) -> SessionWithNotes
     session_id = _resolve_session_id(conn, id_or_prefix)
 
     row = conn.execute(
-        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "
+        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "
         "FROM session WHERE id = ?",
         (session_id,),
     ).fetchone()
@@ -206,6 +207,7 @@ def get_session(conn: sqlite3.Connection, id_or_prefix: str) -> SessionWithNotes
         created_at=session.created_at,
         updated_at=session.updated_at,
         completed_at=session.completed_at,
+        summary=session.summary,
         notes=notes,
     )
 
@@ -230,6 +232,7 @@ def _row_to_session(row: sqlite3.Row) -> Session:
             if row["completed_at"] is not None
             else None
         ),
+        summary=row["summary"],
     )
 
 
@@ -305,7 +308,7 @@ def update_session(
     conn.commit()
 
     row = conn.execute(
-        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "
+        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "
         "FROM session WHERE id = ?",
         (session_id,),
     ).fetchone()
@@ -337,7 +340,7 @@ def heartbeat(conn: sqlite3.Connection, id_or_prefix: str) -> Session:
     conn.commit()
 
     row = conn.execute(
-        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "
+        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "
         "FROM session WHERE id = ?",
         (session_id,),
     ).fetchone()
@@ -349,15 +352,20 @@ def heartbeat(conn: sqlite3.Connection, id_or_prefix: str) -> Session:
 # ---------------------------------------------------------------------------
 
 
-def complete_session(conn: sqlite3.Connection, id_or_prefix: str) -> Session:
+def complete_session(
+    conn: sqlite3.Connection,
+    id_or_prefix: str,
+    summary: Optional[str] = None,
+) -> Session:
     """Mark a session as done.
 
     Sets ``status`` to ``'done'``, ``completed_at`` to now, and bumps
-    ``updated_at``.
+    ``updated_at``. Optionally stores a summary.
 
     Args:
         conn: Open database connection.
         id_or_prefix: Exact session id or a unique prefix.
+        summary: Optional summary of what was accomplished.
 
     Returns:
         The updated :class:`~claude_sessions.models.Session`.
@@ -366,14 +374,14 @@ def complete_session(conn: sqlite3.Connection, id_or_prefix: str) -> Session:
     now = datetime.now().isoformat()
 
     conn.execute(
-        "UPDATE session SET status = 'done', completed_at = ?, updated_at = ? "
+        "UPDATE session SET status = 'done', completed_at = ?, updated_at = ?, summary = ? "
         "WHERE id = ?",
-        (now, now, session_id),
+        (now, now, summary, session_id),
     )
     conn.commit()
 
     row = conn.execute(
-        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "
+        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "
         "FROM session WHERE id = ?",
         (session_id,),
     ).fetchone()
@@ -414,7 +422,7 @@ def reopen_session(
     conn.commit()
 
     row = conn.execute(
-        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "
+        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "
         "FROM session WHERE id = ?",
         (session_id,),
     ).fetchone()
@@ -449,7 +457,7 @@ def list_sessions(
         where = "WHERE completed_at IS NULL"
 
     rows = conn.execute(
-        f"SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "  # noqa: S608
+        f"SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "  # noqa: S608
         f"FROM session {where} ORDER BY updated_at DESC"
     ).fetchall()
 

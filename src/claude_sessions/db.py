@@ -52,6 +52,10 @@ MIGRATIONS: list[list[str]] = [
     [
         "ALTER TABLE session RENAME COLUMN jira TO issue",
     ],
+    # Migration 4 — session summary
+    [
+        "ALTER TABLE session ADD COLUMN summary TEXT",
+    ],
 ]
 
 DB_SCHEMA_VERSION: int = len(MIGRATIONS)
