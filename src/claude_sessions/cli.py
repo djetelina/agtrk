@@ -246,7 +246,7 @@ AGTRK_HOOK_ENTRY = {
 }
 
 
-@app.command(rich_help_panel="Agent commands")
+@app.command()
 def install(
     settings: str = typer.Option(
         str(Path.home() / ".claude" / "settings.json"),
