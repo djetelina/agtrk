@@ -2,6 +2,8 @@
 
 from typing import Optional
 
+import io
+
 import typer
 from rich.console import Console
 from rich.table import Table
@@ -154,7 +156,61 @@ def cleanup_cmd(
         conn.close()
 
 
+INJECT_INSTRUCTIONS = """\
+You MUST review this before doing anything else. If resuming existing work, \
+run agtrk show <id> and read the notes, then run agtrk update <id> --status implementing. \
+If starting new work, run agtrk register --task '...' --status implementing immediately. \
+Then create a heartbeat cron: CronCreate with cron '*/10 * * * *' and prompt \
+'Run: agtrk heartbeat <session-id>'.
+
+During work:
+- agtrk update <id> --note "..." at natural checkpoints — do this proactively
+- agtrk update <id> --status <planning|implementing|waiting> when status changes
+- agtrk update <id> --task "..." to update the task description
+- agtrk update <id> --issue PLAT-1234 to associate an issue/ticket
+- agtrk update <id> --repo <repo-name> to override auto-detected repo
+
+On completion:
+- Delete the heartbeat cron with CronDelete
+- Run agtrk complete <id>
+
+Corrections:
+- agtrk reopen <id> to reactivate a completed session
+
+Backlog:
+- agtrk register --task "..." --status todo for work you notice but shouldn't act on now"""
+
+
 # --- Agent commands ---
+
+
+@app.command(rich_help_panel="Agent commands")
+def inject() -> None:
+    """Output session context and usage instructions for agent hooks."""
+    buf = io.StringIO()
+    hook_console = Console(file=buf, force_terminal=False, highlight=False)
+
+    conn = get_db()
+    try:
+        sessions = list_sessions(conn, include_archived=False)
+        if sessions:
+            table = Table(show_header=True)
+            table.add_column("ID", style="bold")
+            table.add_column("Status")
+            table.add_column("Task")
+            table.add_column("Updated")
+            for s in sessions:
+                table.add_row(s.id, str(s.status), s.task, f"{s.updated_at:%Y-%m-%d %H:%M}")
+            hook_console.print("SESSION TRACKER — active work:")
+            hook_console.print(table)
+        else:
+            hook_console.print("SESSION TRACKER — no active sessions.")
+    finally:
+        conn.close()
+
+    hook_console.print()
+    hook_console.print(INJECT_INSTRUCTIONS)
+    typer.echo(buf.getvalue(), nl=False)
 
 
 @app.command(rich_help_panel="Agent commands")

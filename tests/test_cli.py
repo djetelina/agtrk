@@ -118,3 +118,22 @@ def test_reopen(tmp_db_env):
 def test_not_found(tmp_db_env):
     result = runner.invoke(app, ["show", "nonexistent"])
     assert result.exit_code != 0
+
+
+def test_inject_empty(tmp_db_env):
+    result = runner.invoke(app, ["inject"])
+    assert result.exit_code == 0
+    assert "no active sessions" in result.stdout
+    assert "agtrk update" in result.stdout
+
+
+def test_inject_with_sessions(tmp_db_env):
+    runner.invoke(app, ["register", "--task", "Active work"])
+    result = runner.invoke(app, ["inject"])
+    assert result.exit_code == 0
+    assert "Active work" in result.stdout
+    assert "agtrk show <id>" in result.stdout
+    assert "agtrk register" in result.stdout
+    assert "agtrk update" in result.stdout
+    assert "agtrk complete" in result.stdout
+    assert "heartbeat" in result.stdout
