@@ -48,6 +48,10 @@ MIGRATIONS: list[list[str]] = [
         "ALTER TABLE note ADD COLUMN cwd TEXT",
         "ALTER TABLE note ADD COLUMN worktree INTEGER",
     ],
+    # Migration 3 — rename jira to issue
+    [
+        "ALTER TABLE session RENAME COLUMN jira TO issue",
+    ],
 ]
 
 DB_SCHEMA_VERSION: int = len(MIGRATIONS)

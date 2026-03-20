@@ -18,6 +18,7 @@ agtrk                # list active sessions
 agtrk show <id>      # session details + notes
 agtrk tui            # terminal dashboard (table + kanban views)
 agtrk list           # list with filters (--archived, --all, --verbose)
+agtrk delete <id>    # delete a session and its notes
 agtrk install        # add hooks to ~/.claude/settings.json
 agtrk uninstall      # remove hooks from ~/.claude/settings.json
 agtrk cleanup        # delete archived sessions older than 30 days

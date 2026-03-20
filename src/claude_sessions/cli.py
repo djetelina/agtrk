@@ -14,6 +14,7 @@ from claude_sessions.git import detect_repo, repo_display_name
 from claude_sessions.service import (
     cleanup,
     complete_session,
+    delete_session,
     get_session,
     heartbeat,
     list_sessions,
@@ -75,7 +76,7 @@ def _print_list(archived: bool, show_all: bool, verbose: bool = False) -> None:
                 f"{s.updated_at:%Y-%m-%d %H:%M}",
             ]
             if verbose:
-                row.extend([repo_display_name(s.repo) if s.repo else "", s.jira or ""])
+                row.extend([repo_display_name(s.repo) if s.repo else "", s.issue or ""])
             table.add_row(*row)
         console.print(table)
     finally:
@@ -106,7 +107,7 @@ def show(
         console.print(f"[bold]Task:[/bold] {session.task}")
         console.print(f"[bold]Status:[/bold] {session.status}")
         console.print(f"[bold]Repo:[/bold] {repo_display_name(session.repo) if session.repo else '-'}")
-        console.print(f"[bold]Issue:[/bold] {session.jira or '-'}")
+        console.print(f"[bold]Issue:[/bold] {session.issue or '-'}")
         console.print(f"[bold]Created:[/bold] {session.created_at:%Y-%m-%d %H:%M}")
         console.print(f"[bold]Updated:[/bold] {session.updated_at:%Y-%m-%d %H:%M}")
         if session.completed_at:
@@ -150,6 +151,22 @@ def cleanup_cmd(
     try:
         count = cleanup(conn, older_than_days=older_than)
         console.print(f"Deleted {count} archived session(s)")
+    except ValueError as e:
+        console.print(f"[red]Error:[/red] {e}")
+        raise typer.Exit(1)
+    finally:
+        conn.close()
+
+
+@app.command()
+def delete(
+    id: str = typer.Argument(help="Session ID or prefix"),
+) -> None:
+    """Delete a session and its notes."""
+    conn = get_db()
+    try:
+        deleted_id = delete_session(conn, id_or_prefix=id)
+        console.print(f"Deleted session: {deleted_id}")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)
@@ -323,14 +340,14 @@ def register(
     task: str = typer.Option(..., "--task", help="Task description"),
     repo: Optional[str] = typer.Option(None, "--repo", help="Repository name (auto-detected)"),
     status: str = typer.Option("planning", "--status", help="Initial status"),
-    jira: Optional[str] = typer.Option(None, "--jira", "--issue", help="Issue/ticket key"),
+    issue: Optional[str] = typer.Option(None, "--issue", help="Issue/ticket key"),
     note: Optional[str] = typer.Option(None, "--note", help="Initial note"),
 ) -> None:
     """Register a new session."""
     resolved_repo = repo if repo is not None else detect_repo()
     conn = get_db()
     try:
-        session = register_session(conn, task=task, repo=resolved_repo, status=status, jira=jira, note=note)
+        session = register_session(conn, task=task, repo=resolved_repo, status=status, issue=issue, note=note)
         console.print(f"Registered session: {session.id}")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
@@ -345,14 +362,15 @@ def update(
     task: Optional[str] = typer.Option(None, "--task", help="New task description"),
     repo: Optional[str] = typer.Option(None, "--repo", help="New repository name"),
     status: Optional[str] = typer.Option(None, "--status", help="New status"),
-    jira: Optional[str] = typer.Option(None, "--jira", "--issue", help="Issue/ticket key"),
+    issue: Optional[str] = typer.Option(None, "--issue", help="Issue/ticket key"),
     note: Optional[str] = typer.Option(None, "--note", help="Note to append"),
     branch: Optional[str] = typer.Option(None, "--branch", help="Branch override for note"),
 ) -> None:
     """Update a session."""
     conn = get_db()
     try:
-        update_session(conn, id_or_prefix=id, task=task, repo=repo, status=status, jira=jira, note=note, branch=branch)
+        update_session(conn, id_or_prefix=id, task=task, repo=repo, status=status, issue=issue, note=note, branch=branch)
+        console.print(f"Updated session: {id}")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
         raise typer.Exit(1)

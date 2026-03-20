@@ -260,7 +260,7 @@ def _build_detail_content(session_id: str) -> str:
         f"  [dim]ID[/dim]        {session.id}",
         f"  [dim]Status[/dim]    {session.status}",
         f"  [dim]Repo[/dim]      {repo_display_name(session.repo) if session.repo else '-'}",
-        f"  [dim]Issue[/dim]     {session.jira or '-'}",
+        f"  [dim]Issue[/dim]     {session.issue or '-'}",
         f"  [dim]Created[/dim]   {_time_ago(session.created_at)}  [dim italic]{session.created_at:%Y-%m-%d %H:%M}[/dim italic]",
         f"  [dim]Heartbeat[/dim] {_time_ago(session.updated_at)}  [dim italic]{session.updated_at:%Y-%m-%d %H:%M}[/dim italic]",
     ]
@@ -521,7 +521,7 @@ class SessionDashboard(App):
                 Text(emoji),
                 Text(task, style=style),
                 Text(repo_display_name(s.repo) if s.repo else "", style=style),
-                Text(s.jira or "", style=style),
+                Text(s.issue or "", style=style),
                 key=s.id,
             )
 

@@ -107,6 +107,12 @@ class TestMigration2:
         assert "cwd" in columns
         assert "worktree" in columns
 
+        # Migration 3 renames jira -> issue
+        session_cursor = conn.execute("PRAGMA table_info(session)")
+        session_columns = {row[1] for row in session_cursor.fetchall()}
+        assert "issue" in session_columns
+        assert "jira" not in session_columns
+
         version = conn.execute("SELECT version FROM schema_version").fetchone()[0]
         assert version == DB_SCHEMA_VERSION
         conn.close()

@@ -31,15 +31,15 @@ class TestRegisterSession:
         session = register_session(db, task="Some Task")
         assert session.status == Status.planning
 
-    def test_with_jira_ticket(self, db):
-        """register_session stores jira ticket when provided."""
-        session = register_session(db, task="Fix bug", jira="PLAT-1234")
-        assert session.jira == "PLAT-1234"
+    def test_with_issue(self, db):
+        """register_session stores issue when provided."""
+        session = register_session(db, task="Fix bug", issue="PLAT-1234")
+        assert session.issue == "PLAT-1234"
 
-    def test_without_jira_ticket(self, db):
-        """register_session sets jira to None when not provided."""
+    def test_without_issue(self, db):
+        """register_session sets issue to None when not provided."""
         session = register_session(db, task="Fix bug")
-        assert session.jira is None
+        assert session.issue is None
 
     def test_with_initial_note(self, db):
         """register_session with note= stores a note, visible via get_session."""
@@ -151,12 +151,12 @@ class TestGetSession:
     def test_returns_all_session_fields(self, db):
         """get_session returns all Session fields on the SessionWithNotes object."""
         session = register_session(
-            db, task="Full fields", repo="my-repo", jira="PLAT-99", status="waiting"
+            db, task="Full fields", repo="my-repo", issue="PLAT-99", status="waiting"
         )
         result = get_session(db, session.id)
         assert result.task == "Full fields"
         assert result.repo == "my-repo"
-        assert result.jira == "PLAT-99"
+        assert result.issue == "PLAT-99"
         assert result.status == Status.waiting
 
 
@@ -196,11 +196,11 @@ class TestUpdateSession:
         updated = update_session(db, session.id, status="implementing")
         assert updated.updated_at >= before
 
-    def test_update_jira(self, db):
-        """update_session sets jira field."""
+    def test_update_issue(self, db):
+        """update_session sets issue field."""
         session = register_session(db, task="Jira task")
-        updated = update_session(db, session.id, jira="PLAT-9999")
-        assert updated.jira == "PLAT-9999"
+        updated = update_session(db, session.id, issue="PLAT-9999")
+        assert updated.issue == "PLAT-9999"
 
     def test_update_repo(self, db):
         """update_session sets repo field."""

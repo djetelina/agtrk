@@ -77,7 +77,7 @@ class TestSession:
             task="EoD Day 4",
             repo="some-repo",
             status=Status.planning,
-            jira="PLAT-1234",
+            issue="PLAT-1234",
             created_at=now,
             updated_at=now,
             completed_at=None,
@@ -91,16 +91,16 @@ class TestSession:
         assert s.task == "EoD Day 4"
         assert s.repo == "some-repo"
         assert s.status == Status.planning
-        assert s.jira == "PLAT-1234"
+        assert s.issue == "PLAT-1234"
         assert s.completed_at is None
 
     def test_repo_optional(self):
         s = self._make(repo=None)
         assert s.repo is None
 
-    def test_jira_optional(self):
-        s = self._make(jira=None)
-        assert s.jira is None
+    def test_issue_optional(self):
+        s = self._make(issue=None)
+        assert s.issue is None
 
     def test_completed_at_optional(self):
         now = datetime(2026, 3, 18, 12, 0, 0)

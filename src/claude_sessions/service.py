@@ -23,7 +23,7 @@ class SessionWithNotes:
     task: str
     repo: Optional[str]
     status: Status
-    jira: Optional[str]
+    issue: Optional[str]
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime]
@@ -71,7 +71,7 @@ def register_session(
     task: str,
     repo: Optional[str] = None,
     status: str = "planning",
-    jira: Optional[str] = None,
+    issue: Optional[str] = None,
     note: Optional[str] = None,
 ) -> Session:
     """Create a new session and optionally attach an initial note.
@@ -81,7 +81,7 @@ def register_session(
         task: Human-readable task description (used to derive the slug/id).
         repo: Optional repository name.
         status: Initial status string (default ``"planning"``).
-        jira: Optional Jira ticket key.
+        issue: Optional issue/ticket key.
         note: Optional initial note content.
 
     Returns:
@@ -95,10 +95,10 @@ def register_session(
 
     conn.execute(
         """
-        INSERT INTO session (id, task, repo, status, jira, created_at, updated_at)
+        INSERT INTO session (id, task, repo, status, issue, created_at, updated_at)
         VALUES (?, ?, ?, ?, ?, ?, ?)
         """,
-        (slug, task, repo, status, jira, now, now),
+        (slug, task, repo, status, issue, now, now),
     )
 
     if note is not None:
@@ -111,7 +111,7 @@ def register_session(
         task=task,
         repo=repo,
         status=Status(status),
-        jira=jira,
+        issue=issue,
         created_at=datetime.fromisoformat(now),
         updated_at=datetime.fromisoformat(now),
         completed_at=None,
@@ -181,7 +181,7 @@ def get_session(conn: sqlite3.Connection, id_or_prefix: str) -> SessionWithNotes
     session_id = _resolve_session_id(conn, id_or_prefix)
 
     row = conn.execute(
-        "SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "
+        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "
         "FROM session WHERE id = ?",
         (session_id,),
     ).fetchone()
@@ -200,7 +200,7 @@ def get_session(conn: sqlite3.Connection, id_or_prefix: str) -> SessionWithNotes
         task=session.task,
         repo=session.repo,
         status=session.status,
-        jira=session.jira,
+        issue=session.issue,
         created_at=session.created_at,
         updated_at=session.updated_at,
         completed_at=session.completed_at,
@@ -220,7 +220,7 @@ def _row_to_session(row: sqlite3.Row) -> Session:
         task=row["task"],
         repo=row["repo"],
         status=Status(row["status"]),
-        jira=row["jira"],
+        issue=row["issue"],
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
         completed_at=(
@@ -262,7 +262,7 @@ def update_session(
     task: Optional[str] = None,
     repo: Optional[str] = None,
     status: Optional[str] = None,
-    jira: Optional[str] = None,
+    issue: Optional[str] = None,
     note: Optional[str] = None,
     branch: Optional[str] = None,
 ) -> Session:
@@ -274,7 +274,7 @@ def update_session(
         task: New task description (optional).
         repo: New repo value (optional).
         status: New status string (optional).
-        jira: New Jira ticket key (optional).
+        issue: New issue/ticket key (optional).
         note: Note content to append to the session timeline (optional).
 
     Returns:
@@ -290,8 +290,8 @@ def update_session(
         fields["repo"] = repo
     if status is not None:
         fields["status"] = status
-    if jira is not None:
-        fields["jira"] = jira
+    if issue is not None:
+        fields["issue"] = issue
 
     set_clause = ", ".join(f"{col} = ?" for col in fields)
     values = list(fields.values()) + [session_id]
@@ -303,7 +303,7 @@ def update_session(
     conn.commit()
 
     row = conn.execute(
-        "SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "
+        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "
         "FROM session WHERE id = ?",
         (session_id,),
     ).fetchone()
@@ -335,7 +335,7 @@ def heartbeat(conn: sqlite3.Connection, id_or_prefix: str) -> Session:
     conn.commit()
 
     row = conn.execute(
-        "SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "
+        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "
         "FROM session WHERE id = ?",
         (session_id,),
     ).fetchone()
@@ -371,7 +371,7 @@ def complete_session(conn: sqlite3.Connection, id_or_prefix: str) -> Session:
     conn.commit()
 
     row = conn.execute(
-        "SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "
+        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "
         "FROM session WHERE id = ?",
         (session_id,),
     ).fetchone()
@@ -412,7 +412,7 @@ def reopen_session(
     conn.commit()
 
     row = conn.execute(
-        "SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "
+        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "
         "FROM session WHERE id = ?",
         (session_id,),
     ).fetchone()
@@ -447,7 +447,7 @@ def list_sessions(
         where = "WHERE completed_at IS NULL"
 
     rows = conn.execute(
-        f"SELECT id, task, repo, status, jira, created_at, updated_at, completed_at "  # noqa: S608
+        f"SELECT id, task, repo, status, issue, created_at, updated_at, completed_at "  # noqa: S608
         f"FROM session {where} ORDER BY updated_at DESC"
     ).fetchall()
 
@@ -479,3 +479,24 @@ def cleanup(conn: sqlite3.Connection, older_than_days: int = 30) -> int:
     )
     conn.commit()
     return cursor.rowcount
+
+
+# ---------------------------------------------------------------------------
+# delete_session
+# ---------------------------------------------------------------------------
+
+
+def delete_session(conn: sqlite3.Connection, id_or_prefix: str) -> str:
+    """Delete a session and its notes.
+
+    Args:
+        conn: Open database connection.
+        id_or_prefix: Exact session id or a unique prefix.
+
+    Returns:
+        The id of the deleted session.
+    """
+    session_id = _resolve_session_id(conn, id_or_prefix)
+    conn.execute("DELETE FROM session WHERE id = ?", (session_id,))
+    conn.commit()
+    return session_id

@@ -68,6 +68,7 @@ def test_update(tmp_db_env):
 
     result = runner.invoke(app, ["update", session_id, "--status", "implementing", "--note", "started"])
     assert result.exit_code == 0
+    assert "Updated session:" in result.stdout
 
 
 def test_heartbeat(tmp_db_env):
@@ -115,6 +116,23 @@ def test_reopen(tmp_db_env):
 
     list_result = runner.invoke(app, ["list"])
     assert "Reopen me" in list_result.stdout
+
+
+def test_delete(tmp_db_env):
+    reg = runner.invoke(app, ["register", "--task", "Delete me"])
+    session_id = None
+    for word in reg.stdout.split():
+        if "delete-me" in word:
+            session_id = word.strip()
+            break
+    assert session_id is not None
+
+    result = runner.invoke(app, ["delete", session_id])
+    assert result.exit_code == 0
+    assert "Deleted session:" in result.stdout
+
+    list_result = runner.invoke(app, ["list", "--all"])
+    assert "Delete me" not in list_result.stdout
 
 
 def test_not_found(tmp_db_env):

@@ -22,7 +22,7 @@ class Session:
     task: str
     repo: Optional[str]
     status: Status
-    jira: Optional[str]
+    issue: Optional[str]
     created_at: datetime
     updated_at: datetime
     completed_at: Optional[datetime]
