@@ -174,6 +174,15 @@ run `agtrk show <id>` and read the notes, then run `agtrk update <id> --status i
 If starting new work, run `agtrk register --task '...' --status implementing` immediately. \
 Then create a heartbeat cron: CronCreate with cron '*/30 * * * *' and the following prompt:
 
+If you catch yourself thinking any of these, stop and register:
+
+| Thought | Reality |
+| "Let me just look at the code first" | Register BEFORE touching anything. |
+| "This is a quick question" | A weather question becomes trip planning. Register now. |
+| "I'll register in a moment" | You won't. Do it now. |
+| "User only asked a question" | Questions lead to work. Register first. |
+| "I need to understand the task first" | agtrk register accepts updates. Register now, refine later. |
+
 {cron_prompt}
 
 On completion:
