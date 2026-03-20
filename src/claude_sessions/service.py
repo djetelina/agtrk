@@ -69,6 +69,7 @@ def _create_note(
 def register_session(
     conn: sqlite3.Connection,
     task: str,
+    slug_id: Optional[str] = None,
     repo: Optional[str] = None,
     status: str = "planning",
     issue: Optional[str] = None,
@@ -79,6 +80,7 @@ def register_session(
     Args:
         conn: Open database connection.
         task: Human-readable task description (used to derive the slug/id).
+        slug_id: Optional explicit short ID slug.
         repo: Optional repository name.
         status: Initial status string (default ``"planning"``).
         issue: Optional issue/ticket key.
@@ -90,7 +92,7 @@ def register_session(
     rows = conn.execute("SELECT id FROM session").fetchall()
     existing_slugs: set[str] = {row["id"] for row in rows}
 
-    slug = generate_slug(task, existing_slugs)
+    slug = generate_slug(task, existing_slugs, slug_id=slug_id)
     now = datetime.now().isoformat()
 
     conn.execute(

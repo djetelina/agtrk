@@ -34,35 +34,29 @@ class TestStatus:
 
 class TestGenerateSlug:
     def test_basic(self):
-        assert generate_slug("EoD Day 4") == "eod-day-4"
+        result = generate_slug("EoD Day 4")
+        assert result.startswith("eod-day-4-")
 
     def test_special_chars(self):
-        assert generate_slug("Fix bug #123 (urgent!)") == "fix-bug-123-urgent"
-
-    def test_truncation(self):
-        long_input = "a" * 60
-        result = generate_slug(long_input)
-        assert len(result) <= 20
+        result = generate_slug("Fix bug #123 (urgent!)")
+        assert result.startswith("fix-bug-123-urgent-")
 
     def test_leading_trailing_hyphens_stripped(self):
-        assert generate_slug("--hello world--") == "hello-world"
+        result = generate_slug("--hello world--")
+        assert result.startswith("hello-world-")
 
-    def test_collision_single(self):
-        result = generate_slug("EoD Day 4", existing_slugs={"eod-day-4"})
-        assert result == "eod-day-4-2"
+    def test_with_explicit_id(self):
+        result = generate_slug("Long task description", slug_id="fix-auth")
+        assert result.startswith("fix-auth-")
 
-    def test_collision_multiple(self):
-        existing = {"eod-day-4", "eod-day-4-2", "eod-day-4-3"}
-        result = generate_slug("EoD Day 4", existing_slugs=existing)
-        assert result == "eod-day-4-4"
+    def test_no_collision(self):
+        result = generate_slug("EoD Day 4", existing_slugs={"eod-day-4-abc"})
+        assert result.startswith("eod-day-4-")
+        assert result != "eod-day-4-abc"
 
-    def test_no_collision_when_empty(self):
-        result = generate_slug("EoD Day 4", existing_slugs=set())
-        assert result == "eod-day-4"
-
-    def test_no_collision_when_none(self):
-        result = generate_slug("EoD Day 4", existing_slugs=None)
-        assert result == "eod-day-4"
+    def test_unique_across_calls(self):
+        results = {generate_slug("Same task") for _ in range(20)}
+        assert len(results) > 1
 
 
 # ---------------------------------------------------------------------------

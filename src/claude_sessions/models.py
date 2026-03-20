@@ -40,32 +40,44 @@ class Note:
     worktree: Optional[bool] = None
 
 
-_MAX_SLUG_LEN = 20
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 
 
-def generate_slug(task: str, existing_slugs: Optional[set[str]] = None) -> str:
-    """Generate a URL-safe slug from a task description.
+def _random_suffix(length: int = 3) -> str:
+    """Generate a short random alphanumeric suffix."""
+    import secrets
+    import string
+    alphabet = string.ascii_lowercase + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def generate_slug(
+    task: str,
+    existing_slugs: Optional[set[str]] = None,
+    slug_id: Optional[str] = None,
+) -> str:
+    """Generate a URL-safe session ID.
+
+    If *slug_id* is provided, sanitize it and append a random suffix.
+    Otherwise, fall back to deriving a slug from *task*.
 
     Args:
-        task: Human-readable task description.
-        existing_slugs: Set of already-taken slugs. When provided, a numeric
-            suffix is appended to avoid collisions.
+        task: Human-readable task description (fallback source).
+        existing_slugs: Set of already-taken slugs.
+        slug_id: Explicit short ID chosen by the caller.
 
     Returns:
-        A lowercase, hyphen-separated slug of at most 40 characters.
+        A unique, lowercase, hyphen-separated slug.
     """
-    lowered = task.lower()
+    source = slug_id if slug_id else task
+    lowered = source.lower()
     slugified = _NON_ALNUM.sub("-", lowered)
     slugified = slugified.strip("-")
-    slugified = slugified[:_MAX_SLUG_LEN].rstrip("-")
 
-    if existing_slugs is None or slugified not in existing_slugs:
-        return slugified
+    candidate = f"{slugified}-{_random_suffix()}"
+    if existing_slugs is None:
+        return candidate
 
-    counter = 2
-    while True:
-        candidate = f"{slugified}-{counter}"
-        if candidate not in existing_slugs:
-            return candidate
-        counter += 1
+    while candidate in existing_slugs:
+        candidate = f"{slugified}-{_random_suffix()}"
+    return candidate

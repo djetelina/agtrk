@@ -21,7 +21,7 @@ class TestRegisterSession:
     def test_creates_session_with_correct_fields(self, db):
         """register_session creates a session with slug, task, repo, and status."""
         session = register_session(db, task="End of Day", repo="my-repo")
-        assert session.id == "end-of-day"
+        assert session.id.startswith("end-of-day-")
         assert session.task == "End of Day"
         assert session.repo == "my-repo"
         assert session.status == Status.planning
@@ -54,19 +54,16 @@ class TestRegisterSession:
         result = get_session(db, session.id)
         assert result.notes == []
 
-    def test_slug_collision_appends_suffix(self, db):
-        """Second registration of same task gets '-2' suffix."""
+    def test_multiple_same_task_get_unique_ids(self, db):
+        """Multiple registrations of same task get unique IDs."""
         first = register_session(db, task="Duplicate Task")
         second = register_session(db, task="Duplicate Task")
-        assert first.id == "duplicate-task"
-        assert second.id == "duplicate-task-2"
-
-    def test_slug_collision_third_appends_3(self, db):
-        """Third registration of same task gets '-3' suffix."""
-        register_session(db, task="Triple Task")
-        register_session(db, task="Triple Task")
-        third = register_session(db, task="Triple Task")
-        assert third.id == "triple-task-3"
+        third = register_session(db, task="Duplicate Task")
+        assert first.id != second.id
+        assert second.id != third.id
+        assert first.id.startswith("duplicate-task-")
+        assert second.id.startswith("duplicate-task-")
+        assert third.id.startswith("duplicate-task-")
 
     def test_custom_status(self, db):
         """register_session accepts non-default status."""
@@ -87,22 +84,22 @@ class TestRegisterSession:
 class TestGetSession:
     def test_get_by_full_id(self, db):
         """get_session returns session when given the exact id."""
-        register_session(db, task="Full ID task")
-        result = get_session(db, "full-id-task")
-        assert result.id == "full-id-task"
+        session = register_session(db, task="Full ID task")
+        result = get_session(db, session.id)
+        assert result.id == session.id
         assert result.task == "Full ID task"
 
     def test_get_by_unique_prefix(self, db):
         """get_session resolves a unique prefix to the matching session."""
-        register_session(db, task="eod day 4")
+        session = register_session(db, task="eod day 4")
         result = get_session(db, "eod")
-        assert result.id == "eod-day-4"
+        assert result.id == session.id
 
     def test_get_by_unique_prefix_partial(self, db):
         """get_session resolves an unambiguous partial prefix."""
-        register_session(db, task="Feature work alpha")
+        session = register_session(db, task="Feature work alpha")
         result = get_session(db, "feature-work")
-        assert result.id == "feature-work-alpha"
+        assert result.id == session.id
 
     def test_ambiguous_prefix_raises_value_error(self, db):
         """Ambiguous prefix raises ValueError with 'Ambiguous' in message."""
@@ -269,16 +266,16 @@ class TestReopenSession:
 class TestListSessions:
     def test_list_active_sessions(self, db):
         """Default list returns only active (not completed) sessions."""
-        register_session(db, task="Active one")
-        register_session(db, task="Active two")
+        s1 = register_session(db, task="Active one")
+        s2 = register_session(db, task="Active two")
         s3 = register_session(db, task="Completed one")
         complete_session(db, s3.id)
 
         results = list_sessions(db)
         assert len(results) == 2
         ids = {s.id for s in results}
-        assert "active-one" in ids
-        assert "active-two" in ids
+        assert s1.id in ids
+        assert s2.id in ids
 
     def test_list_archived_only(self, db):
         """archived_only=True returns only completed sessions."""
@@ -288,7 +285,7 @@ class TestListSessions:
 
         results = list_sessions(db, archived_only=True)
         assert len(results) == 1
-        assert results[0].id == "archived-one"
+        assert results[0].id == s2.id
 
     def test_list_all(self, db):
         """include_archived=True returns all sessions."""

@@ -188,7 +188,7 @@ If nothing changed, skip."""
 INJECT_INSTRUCTIONS = """\
 DO NOT respond to the user until you have done one of the following:
 - Resuming existing work: run `agtrk show <id>` and read the notes, then run `agtrk update <id> --status implementing`
-- Starting new work: run `agtrk register --task '...' --status implementing`
+- Starting new work: run `agtrk register --task '...' --id <short-slug> --status implementing`
 
 This is a gate on your response, not a side task. You cannot answer, ask clarifying questions, \
 read code, or invoke skills until tracking is done.
@@ -338,6 +338,7 @@ def uninstall(
 @app.command(rich_help_panel="Agent commands")
 def register(
     task: str = typer.Option(..., "--task", help="Task description"),
+    id: Optional[str] = typer.Option(None, "--id", help="Short ID slug (auto-generated if omitted)"),
     repo: Optional[str] = typer.Option(None, "--repo", help="Repository name (auto-detected)"),
     status: str = typer.Option("planning", "--status", help="Initial status"),
     issue: Optional[str] = typer.Option(None, "--issue", help="Issue/ticket key"),
@@ -347,7 +348,7 @@ def register(
     resolved_repo = repo if repo is not None else detect_repo()
     conn = get_db()
     try:
-        session = register_session(conn, task=task, repo=resolved_repo, status=status, issue=issue, note=note)
+        session = register_session(conn, task=task, slug_id=id, repo=resolved_repo, status=status, issue=issue, note=note)
         console.print(f"Registered session: {session.id}")
     except ValueError as e:
         console.print(f"[red]Error:[/red] {e}")
