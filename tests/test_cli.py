@@ -1,4 +1,6 @@
 """Integration tests for the CLI commands."""
+import json
+
 import pytest
 from typer.testing import CliRunner
 
@@ -137,3 +139,63 @@ def test_inject_with_sessions(tmp_db_env):
     assert "agtrk update" in result.stdout
     assert "agtrk complete" in result.stdout
     assert "heartbeat" in result.stdout
+
+
+def test_install_fresh(tmp_db_env, tmp_path):
+    settings_path = tmp_path / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text("{}")
+
+    result = runner.invoke(app, ["install", "--settings", str(settings_path)])
+    assert result.exit_code == 0
+
+    settings = json.loads(settings_path.read_text())
+    hooks = settings["hooks"]
+    assert "SessionStart" in hooks
+    assert "PreCompact" in hooks
+    for event in ("SessionStart", "PreCompact"):
+        cmds = [h["command"] for entry in hooks[event] for h in entry["hooks"]]
+        assert any("agtrk inject" in c for c in cmds)
+
+
+def test_install_idempotent(tmp_db_env, tmp_path):
+    settings_path = tmp_path / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(json.dumps({
+        "hooks": {
+            "SessionStart": [{"hooks": [
+                {"type": "command", "command": "agtrk inject", "timeout": 10}
+            ]}]
+        }
+    }))
+
+    result = runner.invoke(app, ["install", "--settings", str(settings_path)])
+    assert result.exit_code == 0
+
+    settings = json.loads(settings_path.read_text())
+    agtrk_entries = [
+        entry for entry in settings["hooks"]["SessionStart"]
+        for h in entry["hooks"] if "agtrk inject" in h["command"]
+    ]
+    assert len(agtrk_entries) == 1
+    assert "PreCompact" in settings["hooks"]
+
+
+def test_install_preserves_other_hooks(tmp_db_env, tmp_path):
+    settings_path = tmp_path / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(json.dumps({
+        "hooks": {
+            "SessionStart": [{"hooks": [
+                {"type": "command", "command": "some-other-tool prime"}
+            ]}]
+        }
+    }))
+
+    result = runner.invoke(app, ["install", "--settings", str(settings_path)])
+    assert result.exit_code == 0
+
+    settings = json.loads(settings_path.read_text())
+    cmds = [h["command"] for entry in settings["hooks"]["SessionStart"] for h in entry["hooks"]]
+    assert "some-other-tool prime" in cmds
+    assert any("agtrk inject" in c for c in cmds)

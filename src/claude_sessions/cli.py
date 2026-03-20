@@ -1,8 +1,9 @@
 """CLI commands for claude-sessions."""
 
-from typing import Optional
-
 import io
+import json
+from pathlib import Path
+from typing import Optional
 
 import typer
 from rich.console import Console
@@ -211,6 +212,51 @@ def inject() -> None:
     hook_console.print()
     hook_console.print(INJECT_INSTRUCTIONS)
     typer.echo(buf.getvalue(), nl=False)
+
+
+AGTRK_HOOK_ENTRY = {
+    "hooks": [
+        {
+            "type": "command",
+            "command": "agtrk inject",
+            "timeout": 10,
+            "statusMessage": "Loading session tracker...",
+        }
+    ]
+}
+
+
+@app.command(rich_help_panel="Agent commands")
+def install(
+    settings: str = typer.Option(
+        str(Path.home() / ".claude" / "settings.json"),
+        "--settings",
+        help="Path to Claude Code settings.json",
+    ),
+) -> None:
+    """Install agtrk hooks into Claude Code settings."""
+    settings_path = Path(settings)
+
+    if settings_path.exists():
+        data = json.loads(settings_path.read_text())
+    else:
+        settings_path.parent.mkdir(parents=True, exist_ok=True)
+        data = {}
+
+    hooks = data.setdefault("hooks", {})
+
+    for event in ("SessionStart", "PreCompact"):
+        entries = hooks.setdefault(event, [])
+        already = any(
+            "agtrk inject" in h.get("command", "")
+            for entry in entries
+            for h in entry.get("hooks", [])
+        )
+        if not already:
+            entries.append(AGTRK_HOOK_ENTRY)
+
+    settings_path.write_text(json.dumps(data, indent=2) + "\n")
+    console.print(f"Installed agtrk hooks into {settings_path}")
 
 
 @app.command(rich_help_panel="Agent commands")
