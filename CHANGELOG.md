@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.1] - 2026-03-20
+
+### Fixed
+
+- Status validation — invalid `--status` values now rejected before writing to DB
+- Git URL parser — HTTPS URLs with credentials or ports no longer misclassified as SSH
+- Removed dead `_is_stale()` function from TUI
+- Removed unused imports (`os` in git.py, `subprocess` in test_service.py, `from __future__ import annotations` everywhere)
+
+### Changed
+
+- `open_db()` context manager in `db.py` — shared by CLI and TUI, replaces manual try/finally
+- `SessionWithNotes` now composes `Session` instead of duplicating all fields
+- `_fetch_session()` helper and `_SESSION_COLUMNS` constant deduplicate service layer queries
+- `_resolve_session_id` simplified to single LIKE query
+- `_handle_error()` centralizes CLI ValueError handling with `NoReturn` annotation
+- `_build_session_table()` shared between `list` and `inject` commands
+- Test fixtures consolidated — `git_repo` and `git_repo_with_remote` in conftest.py
+- Test helper `_extract_id()` replaces repeated ID parsing boilerplate
+- Consistent `X | None` syntax throughout (Python 3.12+)
+
 ## [0.6.0] - 2026-03-20
 
 ### Added

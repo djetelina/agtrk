@@ -4,36 +4,86 @@ Sits between db.py (raw SQL/connection management) and cli.py (Typer commands).
 All functions accept an open sqlite3.Connection — callers are responsible for
 obtaining the connection (e.g. via get_db()).
 """
-from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Optional
 
 from claude_sessions.git import detect_branch, detect_cwd, detect_repo, detect_worktree
 from claude_sessions.models import Note, Session, Status, generate_slug
+
+_SESSION_COLUMNS = (
+    "id, task, repo, status, issue, created_at, updated_at, completed_at, summary"
+)
 
 
 @dataclass
 class SessionWithNotes:
     """A Session together with its associated notes."""
 
-    id: str
-    task: str
-    repo: Optional[str]
-    status: Status
-    issue: Optional[str]
-    created_at: datetime
-    updated_at: datetime
-    completed_at: Optional[datetime]
-    summary: Optional[str]
+    session: Session
     notes: list[Note]
 
+    # Delegate attribute access to the inner session for backwards compat
+    def __getattr__(self, name: str) -> object:
+        return getattr(self.session, name)
+
+
+def _validate_status(status: str) -> Status:
+    """Validate a status string against the Status enum."""
+    try:
+        return Status(status)
+    except ValueError:
+        valid = ", ".join(s.value for s in Status)
+        raise ValueError(f"Invalid status '{status}'. Must be one of: {valid}")
+
 
 # ---------------------------------------------------------------------------
-# _create_note
+# Helpers
 # ---------------------------------------------------------------------------
+
+
+def _fetch_session(conn: sqlite3.Connection, session_id: str) -> Session:
+    """Fetch a single session row and convert to a Session dataclass."""
+    row = conn.execute(
+        f"SELECT {_SESSION_COLUMNS} FROM session WHERE id = ?",  # noqa: S608
+        (session_id,),
+    ).fetchone()
+    return _row_to_session(row)
+
+
+def _row_to_session(row: sqlite3.Row) -> Session:
+    """Convert a sqlite3.Row from the session table to a Session dataclass."""
+    return Session(
+        id=row["id"],
+        task=row["task"],
+        repo=row["repo"],
+        status=Status(row["status"]),
+        issue=row["issue"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+        completed_at=(
+            datetime.fromisoformat(row["completed_at"])
+            if row["completed_at"] is not None
+            else None
+        ),
+        summary=row["summary"],
+    )
+
+
+def _row_to_note(row: sqlite3.Row) -> Note:
+    """Convert a sqlite3.Row from the note table to a Note dataclass."""
+    worktree_val = row["worktree"]
+    return Note(
+        id=row["id"],
+        session_id=row["session_id"],
+        content=row["content"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        repo=row["repo"],
+        branch=row["branch"],
+        cwd=row["cwd"],
+        worktree=bool(worktree_val) if worktree_val is not None else None,
+    )
 
 
 def _create_note(
@@ -41,8 +91,8 @@ def _create_note(
     session_id: str,
     content: str,
     timestamp: str,
-    repo: Optional[str] = None,
-    branch: Optional[str] = None,
+    repo: str | None = None,
+    branch: str | None = None,
 ) -> None:
     """Create a note with auto-detected git context.
 
@@ -63,6 +113,40 @@ def _create_note(
 
 
 # ---------------------------------------------------------------------------
+# _resolve_session_id
+# ---------------------------------------------------------------------------
+
+
+def _resolve_session_id(conn: sqlite3.Connection, id_or_prefix: str) -> str:
+    """Resolve a full ID or unique prefix to a session id.
+
+    Args:
+        conn: Open database connection.
+        id_or_prefix: Exact session id or a prefix string.
+
+    Returns:
+        The matching session id.
+
+    Raises:
+        ValueError: If no match is found or the prefix is ambiguous.
+    """
+    matches = conn.execute(
+        "SELECT id FROM session WHERE id LIKE ?", (f"{id_or_prefix}%",)
+    ).fetchall()
+
+    if len(matches) == 0:
+        raise ValueError(f"No session found matching '{id_or_prefix}'")
+
+    if len(matches) > 1:
+        matched_ids = ", ".join(row["id"] for row in matches)
+        raise ValueError(
+            f"Ambiguous prefix '{id_or_prefix}' matches: {matched_ids}"
+        )
+
+    return matches[0]["id"]
+
+
+# ---------------------------------------------------------------------------
 # register_session
 # ---------------------------------------------------------------------------
 
@@ -70,11 +154,11 @@ def _create_note(
 def register_session(
     conn: sqlite3.Connection,
     task: str,
-    slug_id: Optional[str] = None,
-    repo: Optional[str] = None,
+    slug_id: str | None = None,
+    repo: str | None = None,
     status: str = "planning",
-    issue: Optional[str] = None,
-    note: Optional[str] = None,
+    issue: str | None = None,
+    note: str | None = None,
 ) -> Session:
     """Create a new session and optionally attach an initial note.
 
@@ -90,6 +174,8 @@ def register_session(
     Returns:
         The newly created :class:`~claude_sessions.models.Session`.
     """
+    _validate_status(status)
+
     rows = conn.execute("SELECT id FROM session").fetchall()
     existing_slugs: set[str] = {row["id"] for row in rows}
 
@@ -122,48 +208,6 @@ def register_session(
 
 
 # ---------------------------------------------------------------------------
-# _resolve_session_id
-# ---------------------------------------------------------------------------
-
-
-def _resolve_session_id(conn: sqlite3.Connection, id_or_prefix: str) -> str:
-    """Resolve a full ID or unique prefix to a session id.
-
-    Args:
-        conn: Open database connection.
-        id_or_prefix: Exact session id or a prefix string.
-
-    Returns:
-        The matching session id.
-
-    Raises:
-        ValueError: If no match is found or the prefix is ambiguous.
-    """
-    # Try exact match first
-    exact = conn.execute(
-        "SELECT id FROM session WHERE id = ?", (id_or_prefix,)
-    ).fetchone()
-    if exact is not None:
-        return exact["id"]
-
-    # Prefix match
-    matches = conn.execute(
-        "SELECT id FROM session WHERE id LIKE ?", (f"{id_or_prefix}%",)
-    ).fetchall()
-
-    if len(matches) == 0:
-        raise ValueError(f"No session found matching '{id_or_prefix}'")
-
-    if len(matches) > 1:
-        matched_ids = ", ".join(row["id"] for row in matches)
-        raise ValueError(
-            f"Ambiguous prefix '{id_or_prefix}' matches: {matched_ids}"
-        )
-
-    return matches[0]["id"]
-
-
-# ---------------------------------------------------------------------------
 # get_session
 # ---------------------------------------------------------------------------
 
@@ -182,12 +226,7 @@ def get_session(conn: sqlite3.Connection, id_or_prefix: str) -> SessionWithNotes
         ValueError: If the id/prefix doesn't match exactly one session.
     """
     session_id = _resolve_session_id(conn, id_or_prefix)
-
-    row = conn.execute(
-        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "
-        "FROM session WHERE id = ?",
-        (session_id,),
-    ).fetchone()
+    session = _fetch_session(conn, session_id)
 
     note_rows = conn.execute(
         "SELECT id, session_id, content, created_at, repo, branch, cwd, worktree "
@@ -195,64 +234,9 @@ def get_session(conn: sqlite3.Connection, id_or_prefix: str) -> SessionWithNotes
         (session_id,),
     ).fetchall()
 
-    notes = [_row_to_note(nr) for nr in note_rows]
-    session = _row_to_session(row)
-
     return SessionWithNotes(
-        id=session.id,
-        task=session.task,
-        repo=session.repo,
-        status=session.status,
-        issue=session.issue,
-        created_at=session.created_at,
-        updated_at=session.updated_at,
-        completed_at=session.completed_at,
-        summary=session.summary,
-        notes=notes,
-    )
-
-
-# ---------------------------------------------------------------------------
-# _row_to_session
-# ---------------------------------------------------------------------------
-
-
-def _row_to_session(row: sqlite3.Row) -> Session:
-    """Convert a sqlite3.Row from the session table to a Session dataclass."""
-    return Session(
-        id=row["id"],
-        task=row["task"],
-        repo=row["repo"],
-        status=Status(row["status"]),
-        issue=row["issue"],
-        created_at=datetime.fromisoformat(row["created_at"]),
-        updated_at=datetime.fromisoformat(row["updated_at"]),
-        completed_at=(
-            datetime.fromisoformat(row["completed_at"])
-            if row["completed_at"] is not None
-            else None
-        ),
-        summary=row["summary"],
-    )
-
-
-# ---------------------------------------------------------------------------
-# _row_to_note
-# ---------------------------------------------------------------------------
-
-
-def _row_to_note(row: sqlite3.Row) -> Note:
-    """Convert a sqlite3.Row from the note table to a Note dataclass."""
-    worktree_val = row["worktree"]
-    return Note(
-        id=row["id"],
-        session_id=row["session_id"],
-        content=row["content"],
-        created_at=datetime.fromisoformat(row["created_at"]),
-        repo=row["repo"],
-        branch=row["branch"],
-        cwd=row["cwd"],
-        worktree=bool(worktree_val) if worktree_val is not None else None,
+        session=session,
+        notes=[_row_to_note(nr) for nr in note_rows],
     )
 
 
@@ -264,12 +248,12 @@ def _row_to_note(row: sqlite3.Row) -> Note:
 def update_session(
     conn: sqlite3.Connection,
     id_or_prefix: str,
-    task: Optional[str] = None,
-    repo: Optional[str] = None,
-    status: Optional[str] = None,
-    issue: Optional[str] = None,
-    note: Optional[str] = None,
-    branch: Optional[str] = None,
+    task: str | None = None,
+    repo: str | None = None,
+    status: str | None = None,
+    issue: str | None = None,
+    note: str | None = None,
+    branch: str | None = None,
 ) -> Session:
     """Update session fields and optionally append a note.
 
@@ -285,6 +269,9 @@ def update_session(
     Returns:
         The updated :class:`~claude_sessions.models.Session`.
     """
+    if status is not None:
+        _validate_status(status)
+
     session_id = _resolve_session_id(conn, id_or_prefix)
     now = datetime.now().isoformat()
 
@@ -306,13 +293,7 @@ def update_session(
         _create_note(conn, session_id, note, now, branch=branch)
 
     conn.commit()
-
-    row = conn.execute(
-        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "
-        "FROM session WHERE id = ?",
-        (session_id,),
-    ).fetchone()
-    return _row_to_session(row)
+    return _fetch_session(conn, session_id)
 
 
 # ---------------------------------------------------------------------------
@@ -338,13 +319,7 @@ def heartbeat(conn: sqlite3.Connection, id_or_prefix: str) -> Session:
         (now, session_id),
     )
     conn.commit()
-
-    row = conn.execute(
-        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "
-        "FROM session WHERE id = ?",
-        (session_id,),
-    ).fetchone()
-    return _row_to_session(row)
+    return _fetch_session(conn, session_id)
 
 
 # ---------------------------------------------------------------------------
@@ -355,7 +330,7 @@ def heartbeat(conn: sqlite3.Connection, id_or_prefix: str) -> Session:
 def complete_session(
     conn: sqlite3.Connection,
     id_or_prefix: str,
-    summary: Optional[str] = None,
+    summary: str | None = None,
 ) -> Session:
     """Mark a session as done.
 
@@ -379,13 +354,7 @@ def complete_session(
         (now, now, summary, session_id),
     )
     conn.commit()
-
-    row = conn.execute(
-        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "
-        "FROM session WHERE id = ?",
-        (session_id,),
-    ).fetchone()
-    return _row_to_session(row)
+    return _fetch_session(conn, session_id)
 
 
 # ---------------------------------------------------------------------------
@@ -411,6 +380,8 @@ def reopen_session(
     Returns:
         The updated :class:`~claude_sessions.models.Session`.
     """
+    _validate_status(status)
+
     session_id = _resolve_session_id(conn, id_or_prefix)
     now = datetime.now().isoformat()
 
@@ -420,13 +391,7 @@ def reopen_session(
         (status, now, session_id),
     )
     conn.commit()
-
-    row = conn.execute(
-        "SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "
-        "FROM session WHERE id = ?",
-        (session_id,),
-    ).fetchone()
-    return _row_to_session(row)
+    return _fetch_session(conn, session_id)
 
 
 # ---------------------------------------------------------------------------
@@ -457,7 +422,7 @@ def list_sessions(
         where = "WHERE completed_at IS NULL"
 
     rows = conn.execute(
-        f"SELECT id, task, repo, status, issue, created_at, updated_at, completed_at, summary "  # noqa: S608
+        f"SELECT {_SESSION_COLUMNS} "  # noqa: S608
         f"FROM session {where} ORDER BY updated_at DESC"
     ).fetchall()
 

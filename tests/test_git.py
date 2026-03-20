@@ -7,25 +7,6 @@ import pytest
 from claude_sessions.git import detect_branch, detect_cwd, detect_repo, detect_worktree, repo_display_name
 
 
-@pytest.fixture
-def git_repo(tmp_path, monkeypatch):
-    """Create a bare git repo with one commit, cd into it."""
-    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(tmp_path), "commit", "--allow-empty", "-m", "init"], check=True, capture_output=True)
-    monkeypatch.chdir(tmp_path)
-    return tmp_path
-
-
-@pytest.fixture
-def git_repo_with_remote(git_repo):
-    """Add an HTTPS-style origin remote."""
-    subprocess.run(
-        ["git", "-C", str(git_repo), "remote", "add", "origin", "https://github.com/acme/widgets.git"],
-        check=True, capture_output=True,
-    )
-    return git_repo
-
-
 class TestDetectRepo:
     def test_https_remote(self, git_repo_with_remote):
         assert detect_repo() == "acme/widgets"

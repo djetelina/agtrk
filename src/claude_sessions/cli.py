@@ -3,13 +3,13 @@
 import io
 import json
 from pathlib import Path
-from typing import Optional
+from typing import NoReturn
 
 import typer
 from rich.console import Console
 from rich.table import Table
 
-from claude_sessions.db import get_db
+from claude_sessions.db import open_db
 from claude_sessions.git import detect_repo, repo_display_name
 from claude_sessions.service import (
     cleanup,
@@ -31,12 +31,29 @@ app = typer.Typer(
 console = Console()
 
 
+def _handle_error(e: ValueError) -> NoReturn:
+    console.print(f"[red]Error:[/red] {e}")
+    raise typer.Exit(1)
+
+
 def _version_callback(value: bool) -> None:
     if value:
         from claude_sessions import __version__
 
         typer.echo(f"agtrk {__version__}")
         raise typer.Exit
+
+
+def _build_session_table(sessions: list) -> Table:
+    """Build a Rich table of sessions (shared by list and inject)."""
+    table = Table(show_header=True)
+    table.add_column("ID", style="bold")
+    table.add_column("Status")
+    table.add_column("Task")
+    table.add_column("Updated")
+    for s in sessions:
+        table.add_row(s.id, str(s.status), s.task, f"{s.updated_at:%Y-%m-%d %H:%M}")
+    return table
 
 
 @app.callback()
@@ -51,36 +68,27 @@ def default(
 
 
 def _print_list(archived: bool, show_all: bool, verbose: bool = False) -> None:
-    conn = get_db()
-    try:
+    with open_db() as conn:
         sessions = list_sessions(conn, include_archived=show_all, archived_only=archived)
-        if not sessions:
-            if archived:
-                console.print("No archived sessions")
-            else:
-                console.print("No active sessions")
-            return
+    if not sessions:
+        console.print("No archived sessions" if archived else "No active sessions")
+        return
+    if verbose:
         table = Table()
         table.add_column("ID", style="bold")
         table.add_column("Status")
         table.add_column("Task")
         table.add_column("Updated")
-        if verbose:
-            table.add_column("Repo")
-            table.add_column("Issue")
+        table.add_column("Repo")
+        table.add_column("Issue")
         for s in sessions:
-            row = [
-                s.id,
-                str(s.status),
-                s.task,
-                f"{s.updated_at:%Y-%m-%d %H:%M}",
-            ]
-            if verbose:
-                row.extend([repo_display_name(s.repo) if s.repo else "", s.issue or ""])
-            table.add_row(*row)
-        console.print(table)
-    finally:
-        conn.close()
+            table.add_row(
+                s.id, str(s.status), s.task, f"{s.updated_at:%Y-%m-%d %H:%M}",
+                repo_display_name(s.repo) if s.repo else "", s.issue or "",
+            )
+    else:
+        table = _build_session_table(sessions)
+    console.print(table)
 
 
 # --- User commands ---
@@ -101,39 +109,37 @@ def show(
     id: str = typer.Argument(help="Session ID or prefix"),
 ) -> None:
     """Show details of a session."""
-    conn = get_db()
     try:
-        session = get_session(conn, id_or_prefix=id)
-        console.print(f"[bold]Task:[/bold] {session.task}")
-        console.print(f"[bold]Status:[/bold] {session.status}")
-        console.print(f"[bold]Repo:[/bold] {repo_display_name(session.repo) if session.repo else '-'}")
-        console.print(f"[bold]Issue:[/bold] {session.issue or '-'}")
-        console.print(f"[bold]Created:[/bold] {session.created_at:%Y-%m-%d %H:%M}")
-        console.print(f"[bold]Updated:[/bold] {session.updated_at:%Y-%m-%d %H:%M}")
-        if session.completed_at:
-            console.print(f"[bold]Completed:[/bold] {session.completed_at:%Y-%m-%d %H:%M}")
-        if session.summary:
-            console.print(f"\n[bold]Summary:[/bold] {session.summary}")
-        if session.notes:
-            console.print("\n[bold]Notes:[/bold]")
-            for note in reversed(session.notes):
-                parts = [f"{note.created_at:%Y-%m-%d %H:%M}"]
-                tag_parts = []
-                if note.repo:
-                    tag_parts.append(repo_display_name(note.repo))
-                if note.branch:
-                    tag_parts.append(f"@{note.branch}")
-                if tag_parts:
-                    parts.append(f"[{''.join(tag_parts)}]")
-                if note.worktree:
-                    parts.append("\U0001f333")
-                console.print(f"  {' '.join(parts)}")
-                console.print(f"  {note.content}")
+        with open_db() as conn:
+            session = get_session(conn, id_or_prefix=id)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-    finally:
-        conn.close()
+        _handle_error(e)
+
+    console.print(f"[bold]Task:[/bold] {session.task}")
+    console.print(f"[bold]Status:[/bold] {session.status}")
+    console.print(f"[bold]Repo:[/bold] {repo_display_name(session.repo) if session.repo else '-'}")
+    console.print(f"[bold]Issue:[/bold] {session.issue or '-'}")
+    console.print(f"[bold]Created:[/bold] {session.created_at:%Y-%m-%d %H:%M}")
+    console.print(f"[bold]Updated:[/bold] {session.updated_at:%Y-%m-%d %H:%M}")
+    if session.completed_at:
+        console.print(f"[bold]Completed:[/bold] {session.completed_at:%Y-%m-%d %H:%M}")
+    if session.summary:
+        console.print(f"\n[bold]Summary:[/bold] {session.summary}")
+    if session.notes:
+        console.print("\n[bold]Notes:[/bold]")
+        for note in reversed(session.notes):
+            parts = [f"{note.created_at:%Y-%m-%d %H:%M}"]
+            tag_parts = []
+            if note.repo:
+                tag_parts.append(repo_display_name(note.repo))
+            if note.branch:
+                tag_parts.append(f"@{note.branch}")
+            if tag_parts:
+                parts.append(f"[{''.join(tag_parts)}]")
+            if note.worktree:
+                parts.append("\U0001f333")
+            console.print(f"  {' '.join(parts)}")
+            console.print(f"  {note.content}")
 
 
 @app.command()
@@ -149,15 +155,12 @@ def cleanup_cmd(
     older_than: int = typer.Option(30, "--older-than", help="Delete sessions older than N days"),
 ) -> None:
     """Delete archived sessions older than a threshold."""
-    conn = get_db()
     try:
-        count = cleanup(conn, older_than_days=older_than)
-        console.print(f"Deleted {count} archived session(s)")
+        with open_db() as conn:
+            count = cleanup(conn, older_than_days=older_than)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-    finally:
-        conn.close()
+        _handle_error(e)
+    console.print(f"Deleted {count} archived session(s)")
 
 
 @app.command()
@@ -165,15 +168,12 @@ def delete(
     id: str = typer.Argument(help="Session ID or prefix"),
 ) -> None:
     """Delete a session and its notes."""
-    conn = get_db()
     try:
-        deleted_id = delete_session(conn, id_or_prefix=id)
-        console.print(f"Deleted session: {deleted_id}")
+        with open_db() as conn:
+            deleted_id = delete_session(conn, id_or_prefix=id)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-    finally:
-        conn.close()
+        _handle_error(e)
+    console.print(f"Deleted session: {deleted_id}")
 
 
 INJECT_CRON_PROMPT = """\
@@ -230,23 +230,14 @@ def inject() -> None:
     buf = io.StringIO()
     hook_console = Console(file=buf, force_terminal=False, highlight=False)
 
-    conn = get_db()
-    try:
+    with open_db() as conn:
         sessions = list_sessions(conn, include_archived=False)
-        if sessions:
-            table = Table(show_header=True)
-            table.add_column("ID", style="bold")
-            table.add_column("Status")
-            table.add_column("Task")
-            table.add_column("Updated")
-            for s in sessions:
-                table.add_row(s.id, str(s.status), s.task, f"{s.updated_at:%Y-%m-%d %H:%M}")
-            hook_console.print("SESSION TRACKER — active work:")
-            hook_console.print(table)
-        else:
-            hook_console.print("SESSION TRACKER — no active sessions.")
-    finally:
-        conn.close()
+
+    if sessions:
+        hook_console.print("SESSION TRACKER — active work:")
+        hook_console.print(_build_session_table(sessions))
+    else:
+        hook_console.print("SESSION TRACKER — no active sessions.")
 
     hook_console.print()
     hook_console.print(INJECT_INSTRUCTIONS)
@@ -340,45 +331,39 @@ def uninstall(
 @app.command(rich_help_panel="Agent commands")
 def register(
     task: str = typer.Option(..., "--task", help="Task description"),
-    id: Optional[str] = typer.Option(None, "--id", help="Short ID slug (auto-generated if omitted)"),
-    repo: Optional[str] = typer.Option(None, "--repo", help="Repository name (auto-detected)"),
+    id: str | None = typer.Option(None, "--id", help="Short ID slug (auto-generated if omitted)"),
+    repo: str | None = typer.Option(None, "--repo", help="Repository name (auto-detected)"),
     status: str = typer.Option("planning", "--status", help="Initial status"),
-    issue: Optional[str] = typer.Option(None, "--issue", help="Issue/ticket key"),
-    note: Optional[str] = typer.Option(None, "--note", help="Initial note"),
+    issue: str | None = typer.Option(None, "--issue", help="Issue/ticket key"),
+    note: str | None = typer.Option(None, "--note", help="Initial note"),
 ) -> None:
     """Register a new session."""
     resolved_repo = repo if repo is not None else detect_repo()
-    conn = get_db()
     try:
-        session = register_session(conn, task=task, slug_id=id, repo=resolved_repo, status=status, issue=issue, note=note)
-        console.print(f"Registered session: {session.id}")
+        with open_db() as conn:
+            session = register_session(conn, task=task, slug_id=id, repo=resolved_repo, status=status, issue=issue, note=note)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-    finally:
-        conn.close()
+        _handle_error(e)
+    console.print(f"Registered session: {session.id}")
 
 
 @app.command(rich_help_panel="Agent commands")
 def update(
     id: str = typer.Argument(help="Session ID or prefix"),
-    task: Optional[str] = typer.Option(None, "--task", help="New task description"),
-    repo: Optional[str] = typer.Option(None, "--repo", help="New repository name"),
-    status: Optional[str] = typer.Option(None, "--status", help="New status"),
-    issue: Optional[str] = typer.Option(None, "--issue", help="Issue/ticket key"),
-    note: Optional[str] = typer.Option(None, "--note", help="Note to append"),
-    branch: Optional[str] = typer.Option(None, "--branch", help="Branch override for note"),
+    task: str | None = typer.Option(None, "--task", help="New task description"),
+    repo: str | None = typer.Option(None, "--repo", help="New repository name"),
+    status: str | None = typer.Option(None, "--status", help="New status"),
+    issue: str | None = typer.Option(None, "--issue", help="Issue/ticket key"),
+    note: str | None = typer.Option(None, "--note", help="Note to append"),
+    branch: str | None = typer.Option(None, "--branch", help="Branch override for note"),
 ) -> None:
     """Update a session."""
-    conn = get_db()
     try:
-        update_session(conn, id_or_prefix=id, task=task, repo=repo, status=status, issue=issue, note=note, branch=branch)
-        console.print(f"Updated session: {id}")
+        with open_db() as conn:
+            update_session(conn, id_or_prefix=id, task=task, repo=repo, status=status, issue=issue, note=note, branch=branch)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-    finally:
-        conn.close()
+        _handle_error(e)
+    console.print(f"Updated session: {id}")
 
 
 @app.command(name="heartbeat", rich_help_panel="Agent commands")
@@ -386,31 +371,25 @@ def heartbeat_cmd(
     id: str = typer.Argument(help="Session ID or prefix"),
 ) -> None:
     """Bump the updated_at timestamp of a session."""
-    conn = get_db()
     try:
-        heartbeat(conn, id_or_prefix=id)
+        with open_db() as conn:
+            heartbeat(conn, id_or_prefix=id)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-    finally:
-        conn.close()
+        _handle_error(e)
 
 
 @app.command(rich_help_panel="Agent commands")
 def complete(
     id: str = typer.Argument(help="Session ID or prefix"),
-    summary: Optional[str] = typer.Option(None, "--summary", help="Summary of what was accomplished"),
+    summary: str | None = typer.Option(None, "--summary", help="Summary of what was accomplished"),
 ) -> None:
     """Mark a session as done."""
-    conn = get_db()
     try:
-        complete_session(conn, id_or_prefix=id, summary=summary)
-        console.print(f"Completed session: {id}")
+        with open_db() as conn:
+            complete_session(conn, id_or_prefix=id, summary=summary)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-    finally:
-        conn.close()
+        _handle_error(e)
+    console.print(f"Completed session: {id}")
 
 
 @app.command(rich_help_panel="Agent commands")
@@ -419,12 +398,9 @@ def reopen(
     status: str = typer.Option("implementing", "--status", help="Status to reopen with"),
 ) -> None:
     """Reopen a completed session."""
-    conn = get_db()
     try:
-        reopen_session(conn, id_or_prefix=id, status=status)
-        console.print(f"Reopened session: {id}")
+        with open_db() as conn:
+            reopen_session(conn, id_or_prefix=id, status=status)
     except ValueError as e:
-        console.print(f"[red]Error:[/red] {e}")
-        raise typer.Exit(1)
-    finally:
-        conn.close()
+        _handle_error(e)
+    console.print(f"Reopened session: {id}")

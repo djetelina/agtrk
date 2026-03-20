@@ -1,6 +1,4 @@
 """Tests for claude_sessions.service"""
-import subprocess
-
 import pytest
 
 from claude_sessions.models import Session, Status
@@ -70,6 +68,11 @@ class TestRegisterSession:
         session = register_session(db, task="Implementing stuff", status="implementing")
         assert session.status == Status.implementing
 
+    def test_invalid_status_raises(self, db):
+        """register_session rejects invalid status strings."""
+        with pytest.raises(ValueError, match="Invalid status"):
+            register_session(db, task="Bad status", status="garbage")
+
     def test_persists_to_db(self, db):
         """Registered session is queryable from the database."""
         session = register_session(db, task="Persist me", repo="repo-x")
@@ -124,8 +127,6 @@ class TestGetSession:
     def test_returns_notes_ordered_by_created_at(self, db):
         """Notes are returned ordered by created_at ascending."""
         session = register_session(db, task="Ordered notes")
-        # Insert extra notes directly to control ordering test
-        import sqlite3
         db.execute(
             "INSERT INTO note (session_id, content, created_at) VALUES (?, ?, ?)",
             (session.id, "Note B", "2026-01-01T10:00:00"),
@@ -360,22 +361,8 @@ class TestCleanup:
         assert note_rows == []
 
 
-@pytest.fixture
-def git_repo(tmp_path, monkeypatch):
-    """Create a git repo with an origin remote, cd into it."""
-    subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
-    subprocess.run(["git", "-C", str(tmp_path), "commit", "--allow-empty", "-m", "init"], check=True, capture_output=True)
-    subprocess.run(
-        ["git", "-C", str(tmp_path), "remote", "add", "origin", "https://github.com/acme/widgets.git"],
-        check=True, capture_output=True,
-    )
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setenv("HOME", str(tmp_path.parent))
-    return tmp_path
-
-
 class TestNoteAutoDetection:
-    def test_register_note_gets_git_context(self, db, git_repo):
+    def test_register_note_gets_git_context(self, db, git_repo_with_remote):
         """Note created via register picks up repo/branch/cwd/worktree."""
         session = register_session(db, task="Auto note", note="initial")
         result = get_session(db, session.id)
@@ -385,7 +372,7 @@ class TestNoteAutoDetection:
         assert note.cwd is not None
         assert note.worktree is False
 
-    def test_update_note_gets_git_context(self, db, git_repo):
+    def test_update_note_gets_git_context(self, db, git_repo_with_remote):
         """Note created via update picks up repo/branch/cwd/worktree."""
         session = register_session(db, task="Update auto")
         update_session(db, session.id, note="progress")
@@ -394,7 +381,7 @@ class TestNoteAutoDetection:
         assert note.repo == "acme/widgets"
         assert note.branch is not None
 
-    def test_note_branch_override(self, db, git_repo):
+    def test_note_branch_override(self, db, git_repo_with_remote):
         """Explicit branch overrides auto-detected value."""
         session = register_session(db, task="Branch override")
         update_session(db, session.id, note="custom branch", branch="custom/branch")

@@ -1,7 +1,5 @@
 """Git context auto-detection for claude-sessions."""
-from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 
@@ -41,12 +39,13 @@ def detect_repo() -> str | None:
 
 def _parse_remote_url(url: str) -> str:
     """Extract 'org/repo' from a git remote URL."""
-    if ":" in url and "@" in url:
-        path = url.split(":")[-1]
-    else:
-        path = url.split("//")[-1]
+    if "://" in url:
+        path = url.split("//", 1)[-1]
         parts = path.split("/", 1)
         path = parts[1] if len(parts) > 1 else path
+    else:
+        # SSH-style: git@host:org/repo.git
+        path = url.split(":")[-1]
 
     if path.endswith(".git"):
         path = path[:-4]

@@ -11,7 +11,7 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Label, Static
 
-from claude_sessions.db import get_db
+from claude_sessions.db import open_db
 from claude_sessions.git import repo_display_name
 from claude_sessions.models import Session, Status
 from claude_sessions.service import get_session, list_sessions
@@ -72,19 +72,16 @@ def _heartbeat_tier(s: Session) -> str:
     return "stale"
 
 
-def _is_stale(s: Session) -> bool:
-    return _heartbeat_tier(s) == "stale"
+_TIER_DOT = {
+    "todo": "[dim]○[/dim]",
+    "fresh": "[green]●[/green]",
+    "warm": "[dark_orange]●[/dark_orange]",
+    "stale": "[red]●[/red]",
+}
 
 
 def _status_dot(s: Session) -> str:
-    tier = _heartbeat_tier(s)
-    if tier == "todo":
-        return "[dim]○[/dim]"
-    if tier == "fresh":
-        return "[green]●[/green]"
-    if tier == "warm":
-        return "[dark_orange]●[/dark_orange]"
-    return "[red]●[/red]"
+    return _TIER_DOT[_heartbeat_tier(s)]
 
 
 def _group_by_status(sessions: list[Session], include_done: bool = False) -> dict[Status, list[Session]]:
@@ -247,11 +244,8 @@ class DetailScreen(ModalScreen):
 
 
 def _build_detail_content(session_id: str) -> str:
-    conn = get_db()
-    try:
+    with open_db() as conn:
         session = get_session(conn, session_id)
-    finally:
-        conn.close()
 
     emoji = STATUS_EMOJI.get(session.status, "")
     lines = [
@@ -367,11 +361,14 @@ class CardItem(Static):
             yield Static(repo, classes="card-meta-left")
             yield BreathingDot(s, classes="card-meta-right")
 
-    def on_click(self) -> None:
+    def _open_detail(self) -> None:
         self.app.push_screen(DetailScreen(_build_detail_content(self.session.id)))
 
+    def on_click(self) -> None:
+        self._open_detail()
+
     def key_enter(self) -> None:
-        self.app.push_screen(DetailScreen(_build_detail_content(self.session.id)))
+        self._open_detail()
 
     def action_prev(self) -> None:
         siblings = list(self.parent.query(CardItem))
@@ -476,11 +473,8 @@ class SessionDashboard(App):
         )
 
     def _load_data(self) -> None:
-        conn = get_db()
-        try:
+        with open_db() as conn:
             new_sessions = list_sessions(conn, include_archived=self.show_archived)
-        finally:
-            conn.close()
         old_ids = [s.id for s in self._sessions]
         new_ids = [s.id for s in new_sessions]
         changed = old_ids != new_ids or any(

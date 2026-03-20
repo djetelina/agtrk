@@ -1,10 +1,9 @@
 """Database access layer for claude-sessions."""
-from __future__ import annotations
 
 import os
 import sqlite3
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
 
 DEFAULT_DB_PATH = Path.home() / ".local" / "share" / "claude-sessions" / "sessions.db"
 
@@ -61,7 +60,7 @@ MIGRATIONS: list[list[str]] = [
 DB_SCHEMA_VERSION: int = len(MIGRATIONS)
 
 
-def get_db(db_path: Optional[Path] = None) -> sqlite3.Connection:
+def get_db(db_path: Path | None = None) -> sqlite3.Connection:
     """Open (and initialise) the SQLite database.
 
     Resolution order for the database path:
@@ -100,6 +99,16 @@ def get_db(db_path: Optional[Path] = None) -> sqlite3.Connection:
     _run_migrations(conn)
 
     return conn
+
+
+@contextmanager
+def open_db(db_path: Path | None = None):
+    """Context manager that opens a DB connection and ensures it is closed."""
+    conn = get_db(db_path)
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def _ensure_schema_version_table(conn: sqlite3.Connection) -> None:

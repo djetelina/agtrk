@@ -1,11 +1,9 @@
 """Data models for claude-sessions."""
-from __future__ import annotations
 
 import re
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Optional
 
 
 class Status(StrEnum):
@@ -20,13 +18,13 @@ class Status(StrEnum):
 class Session:
     id: str
     task: str
-    repo: Optional[str]
+    repo: str | None
     status: Status
-    issue: Optional[str]
+    issue: str | None
     created_at: datetime
     updated_at: datetime
-    completed_at: Optional[datetime]
-    summary: Optional[str] = None
+    completed_at: datetime | None
+    summary: str | None = None
 
 
 @dataclass
@@ -35,10 +33,10 @@ class Note:
     session_id: str
     content: str
     created_at: datetime
-    repo: Optional[str] = None
-    branch: Optional[str] = None
-    cwd: Optional[str] = None
-    worktree: Optional[bool] = None
+    repo: str | None = None
+    branch: str | None = None
+    cwd: str | None = None
+    worktree: bool | None = None
 
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
@@ -54,8 +52,8 @@ def _random_suffix(length: int = 3) -> str:
 
 def generate_slug(
     task: str,
-    existing_slugs: Optional[set[str]] = None,
-    slug_id: Optional[str] = None,
+    existing_slugs: set[str] | None = None,
+    slug_id: str | None = None,
 ) -> str:
     """Generate a URL-safe session ID.
 

@@ -9,6 +9,14 @@ from claude_sessions.cli import app
 runner = CliRunner()
 
 
+def _extract_id(output: str, slug_prefix: str) -> str:
+    """Extract a session ID containing slug_prefix from CLI output."""
+    for word in output.split():
+        if slug_prefix in word:
+            return word.strip()
+    raise AssertionError(f"Could not find '{slug_prefix}' in: {output}")
+
+
 def test_register(tmp_db_env):
     result = runner.invoke(app, ["register", "--task", "EoD Day 4"])
     assert result.exit_code == 0
@@ -23,6 +31,12 @@ def test_register_with_explicit_repo(tmp_db_env):
 def test_register_with_status(tmp_db_env):
     result = runner.invoke(app, ["register", "--task", "Fix test", "--status", "todo"])
     assert result.exit_code == 0
+
+
+def test_register_invalid_status(tmp_db_env):
+    result = runner.invoke(app, ["register", "--task", "Bad status", "--status", "garbage"])
+    assert result.exit_code != 0
+    assert "Invalid status" in result.stdout
 
 
 def test_list_empty(tmp_db_env):
@@ -42,13 +56,7 @@ def test_list_with_sessions(tmp_db_env):
 
 def test_show(tmp_db_env):
     reg = runner.invoke(app, ["register", "--task", "My session"])
-    # Extract the session ID from the output
-    session_id = None
-    for word in reg.stdout.split():
-        if "my-session" in word:
-            session_id = word.strip()
-            break
-    assert session_id is not None, f"Could not find session id in: {reg.stdout}"
+    session_id = _extract_id(reg.stdout, "my-session")
 
     runner.invoke(app, ["update", session_id, "--note", "Some progress made"])
     result = runner.invoke(app, ["show", session_id])
@@ -59,12 +67,7 @@ def test_show(tmp_db_env):
 
 def test_update(tmp_db_env):
     reg = runner.invoke(app, ["register", "--task", "Update me"])
-    session_id = None
-    for word in reg.stdout.split():
-        if "update-me" in word:
-            session_id = word.strip()
-            break
-    assert session_id is not None
+    session_id = _extract_id(reg.stdout, "update-me")
 
     result = runner.invoke(app, ["update", session_id, "--status", "implementing", "--note", "started"])
     assert result.exit_code == 0
@@ -73,12 +76,7 @@ def test_update(tmp_db_env):
 
 def test_heartbeat(tmp_db_env):
     reg = runner.invoke(app, ["register", "--task", "Heartbeat task"])
-    session_id = None
-    for word in reg.stdout.split():
-        if "heartbeat-task" in word:
-            session_id = word.strip()
-            break
-    assert session_id is not None
+    session_id = _extract_id(reg.stdout, "heartbeat-task")
 
     result = runner.invoke(app, ["heartbeat", session_id])
     assert result.exit_code == 0
@@ -86,12 +84,7 @@ def test_heartbeat(tmp_db_env):
 
 def test_complete(tmp_db_env):
     reg = runner.invoke(app, ["register", "--task", "Complete me"])
-    session_id = None
-    for word in reg.stdout.split():
-        if "complete-me" in word:
-            session_id = word.strip()
-            break
-    assert session_id is not None
+    session_id = _extract_id(reg.stdout, "complete-me")
 
     runner.invoke(app, ["complete", session_id])
 
@@ -104,12 +97,7 @@ def test_complete(tmp_db_env):
 
 def test_reopen(tmp_db_env):
     reg = runner.invoke(app, ["register", "--task", "Reopen me"])
-    session_id = None
-    for word in reg.stdout.split():
-        if "reopen-me" in word:
-            session_id = word.strip()
-            break
-    assert session_id is not None
+    session_id = _extract_id(reg.stdout, "reopen-me")
 
     runner.invoke(app, ["complete", session_id])
     runner.invoke(app, ["reopen", session_id])
@@ -120,12 +108,7 @@ def test_reopen(tmp_db_env):
 
 def test_delete(tmp_db_env):
     reg = runner.invoke(app, ["register", "--task", "Delete me"])
-    session_id = None
-    for word in reg.stdout.split():
-        if "delete-me" in word:
-            session_id = word.strip()
-            break
-    assert session_id is not None
+    session_id = _extract_id(reg.stdout, "delete-me")
 
     result = runner.invoke(app, ["delete", session_id])
     assert result.exit_code == 0
