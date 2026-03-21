@@ -241,6 +241,9 @@ If you catch yourself thinking any of these, stop and register:
 | "User only asked a question" | Questions lead to work. Register first. |
 | "I need to understand the task first" | agtrk register accepts updates. Register now, refine later. |
 
+If you completed a session mid-conversation and a follow-up turns into new work \
+(code changes, investigations, or anything beyond a simple answer), register a new session before proceeding.
+
 On completion (requires user confirmation — do NOT complete on your own):
 - Delete the heartbeat cron with CronDelete
 - Run `agtrk complete <id> --summary "Brief description of what was accomplished"`
