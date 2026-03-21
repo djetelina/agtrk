@@ -20,8 +20,14 @@
 
 ## Releasing
 
+Version bump + changelog only for app changes (code, prompts, features). Not for docs, tests, or config-only changes.
+
 Every `git push` is a version release. Before pushing:
 
 1. Bump the version in `pyproject.toml` (single source of truth — `__version__` is derived via `importlib.metadata`).
 2. Move `[Unreleased]` entries in `CHANGELOG.md` into a new `[X.Y.Z] - YYYY-MM-DD` section.
 3. Commit the version bump + changelog as its own commit (e.g., `release: vX.Y.Z`).
+
+## Prompt Decision Records
+
+Prompt engineering decisions are documented in `docs/prompt-decisions/`. Each file covers one decision with sections: Context, Decision, Tradeoff, Expectation. Keep them brief — the goal is to track why prompt changes were made and what to watch for.
