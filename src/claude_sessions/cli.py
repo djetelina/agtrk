@@ -9,6 +9,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from claude_sessions.models import Status
+
 from claude_sessions.db import open_db
 from claude_sessions.git import detect_repo, repo_display_name
 from claude_sessions.service import (
@@ -221,8 +223,9 @@ DO NOT respond to the user until you have done ALL of the following:
 1. Register or resume:
    - Resuming existing work: run `agtrk show <id>` and read the notes, then run `agtrk update <id> --status implementing`
    - Starting new work: run `agtrk register --task '...' --id <short-slug> \
---status <todo|planning|implementing>`
-     (todo = noted for later; planning = researching/investigating; implementing = actively writing code)
+--status <{statuses}>`
+     (todo = noted for later; planning = researching/investigating; implementing = actively writing code; \
+waiting = blocked or awaiting external input)
 2. Create a heartbeat cron: CronCreate with cron '*/30 * * * *' and the prompt between the markers:
 
 --- BEGIN CRON PROMPT ---
@@ -262,7 +265,8 @@ Search:
 
 Backlog:
 - `agtrk register --task "..." --status todo` for work you notice but shouldn't act on now""".format(
-    cron_prompt=INJECT_CRON_PROMPT
+    cron_prompt=INJECT_CRON_PROMPT,
+    statuses="|".join(s.value for s in Status if s != Status.done),
 )
 
 
