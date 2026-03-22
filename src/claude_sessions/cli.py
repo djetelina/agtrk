@@ -232,6 +232,11 @@ DO NOT respond to the user until you have done ALL of the following:
 This is a gate on your response, not a side task. You cannot answer, ask clarifying questions, \
 read code, or invoke skills until both steps are done.
 
+Exception — choosing a todo: if the user's message signals they want to pick up existing \
+todo work (e.g. "let me work on a todo", "what's on my backlog", "pick up where I left off"), \
+you may ask which session they want to resume BEFORE completing step 1. Once they choose, \
+use the "Resuming existing work" path with that session's ID.
+
 If you catch yourself thinking any of these, stop and register:
 
 | Thought | Reality |
