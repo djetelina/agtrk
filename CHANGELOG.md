@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Minimum Python version raised from 3.10 to 3.11 (StrEnum requires 3.11+)
+
 ## [1.0.0] - 2026-03-24
 
 ### Changed

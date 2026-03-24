@@ -6,7 +6,7 @@
 
 ## Stack
 
-- Python 3.10+, managed with `uv`
+- Python 3.11+, managed with `uv`
 - CLI: Typer + Rich
 - TUI: Textual
 - DB: SQLite (WAL mode)
