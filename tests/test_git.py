@@ -1,10 +1,11 @@
-"""Tests for claude_sessions.git — uses real temp git repos, no mocking."""
+"""Tests for agtrk.git — uses real temp git repos, no mocking."""
+
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from claude_sessions.git import detect_branch, detect_cwd, detect_repo, detect_worktree, repo_display_name
+from agtrk.git import detect_branch, detect_cwd, detect_repo, detect_worktree, repo_display_name
 
 
 class TestDetectRepo:
@@ -14,7 +15,8 @@ class TestDetectRepo:
     def test_ssh_remote(self, git_repo, monkeypatch):
         subprocess.run(
             ["git", "-C", str(git_repo), "remote", "add", "origin", "git@github.com:org/my-repo.git"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         assert detect_repo() == "org/my-repo"
 
@@ -66,9 +68,11 @@ class TestDetectWorktree:
         wt_path = tmp_path / "my-worktree"
         subprocess.run(
             ["git", "-C", str(git_repo), "worktree", "add", str(wt_path), "-b", "wt-branch"],
-            check=True, capture_output=True,
+            check=True,
+            capture_output=True,
         )
         import os
+
         os.chdir(wt_path)
         assert detect_worktree() is True
 

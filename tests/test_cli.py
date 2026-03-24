@@ -1,10 +1,11 @@
 """Integration tests for the CLI commands."""
+
 import json
 
 import pytest
 from typer.testing import CliRunner
 
-from claude_sessions.cli import app
+from agtrk.cli import app
 
 runner = CliRunner()
 
@@ -18,9 +19,9 @@ def _extract_id(output: str, slug_prefix: str) -> str:
 
 
 def test_register(tmp_db_env):
-    result = runner.invoke(app, ["register", "--task", "EoD Day 4"])
+    result = runner.invoke(app, ["register", "--task", "Fix login bug"])
     assert result.exit_code == 0
-    assert "eod-day-4" in result.stdout
+    assert "fix-login-bug" in result.stdout
 
 
 def test_register_with_explicit_repo(tmp_db_env):
@@ -181,23 +182,20 @@ def test_install_fresh(tmp_db_env, tmp_path):
 def test_install_idempotent(tmp_db_env, tmp_path):
     settings_path = tmp_path / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
-    settings_path.write_text(json.dumps({
-        "hooks": {
-            "SessionStart": [{"hooks": [
-                {"type": "command", "command": "agtrk inject", "timeout": 10}
-            ]}]
-        },
-        "permissions": {"allow": ["Bash(agtrk:*)"]}
-    }))
+    settings_path.write_text(
+        json.dumps(
+            {
+                "hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "agtrk inject", "timeout": 10}]}]},
+                "permissions": {"allow": ["Bash(agtrk:*)"]},
+            }
+        )
+    )
 
     result = runner.invoke(app, ["install", "--settings", str(settings_path)])
     assert result.exit_code == 0
 
     settings = json.loads(settings_path.read_text())
-    agtrk_entries = [
-        entry for entry in settings["hooks"]["SessionStart"]
-        for h in entry["hooks"] if "agtrk inject" in h["command"]
-    ]
+    agtrk_entries = [entry for entry in settings["hooks"]["SessionStart"] for h in entry["hooks"] if "agtrk inject" in h["command"]]
     assert len(agtrk_entries) == 1
     assert "PreCompact" in settings["hooks"]
     assert settings["permissions"]["allow"].count("Bash(agtrk:*)") == 1
@@ -206,13 +204,7 @@ def test_install_idempotent(tmp_db_env, tmp_path):
 def test_install_preserves_other_hooks(tmp_db_env, tmp_path):
     settings_path = tmp_path / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
-    settings_path.write_text(json.dumps({
-        "hooks": {
-            "SessionStart": [{"hooks": [
-                {"type": "command", "command": "some-other-tool prime"}
-            ]}]
-        }
-    }))
+    settings_path.write_text(json.dumps({"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": "some-other-tool prime"}]}]}}))
 
     result = runner.invoke(app, ["install", "--settings", str(settings_path)])
     assert result.exit_code == 0
@@ -227,18 +219,22 @@ def test_uninstall(tmp_db_env, tmp_path):
     settings_path = tmp_path / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
     # Start with a fully installed state plus other hooks
-    settings_path.write_text(json.dumps({
-        "hooks": {
-            "SessionStart": [
-                {"hooks": [{"type": "command", "command": "some-other-tool prime"}]},
-                {"hooks": [{"type": "command", "command": "agtrk inject", "timeout": 10}]},
-            ],
-            "PreCompact": [
-                {"hooks": [{"type": "command", "command": "agtrk inject", "timeout": 10}]},
-            ],
-        },
-        "permissions": {"allow": ["Read", "Bash(agtrk:*)", "Grep"]}
-    }))
+    settings_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "SessionStart": [
+                        {"hooks": [{"type": "command", "command": "some-other-tool prime"}]},
+                        {"hooks": [{"type": "command", "command": "agtrk inject", "timeout": 10}]},
+                    ],
+                    "PreCompact": [
+                        {"hooks": [{"type": "command", "command": "agtrk inject", "timeout": 10}]},
+                    ],
+                },
+                "permissions": {"allow": ["Read", "Bash(agtrk:*)", "Grep"]},
+            }
+        )
+    )
 
     result = runner.invoke(app, ["uninstall", "--settings", str(settings_path)])
     assert result.exit_code == 0

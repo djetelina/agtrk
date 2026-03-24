@@ -1,4 +1,4 @@
-"""Service layer for claude-sessions.
+"""Service layer for agtrk.
 
 Sits between db.py (raw SQL/connection management) and cli.py (Typer commands).
 All functions accept an open sqlite3.Connection — callers are responsible for
@@ -9,12 +9,10 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from claude_sessions.git import detect_branch, detect_cwd, detect_repo, detect_worktree
-from claude_sessions.models import Note, Session, Status, generate_slug
+from agtrk.git import detect_branch, detect_cwd, detect_repo, detect_worktree
+from agtrk.models import Note, Session, Status, generate_slug
 
-_SESSION_COLUMNS = (
-    "id, task, repo, status, issue, created_at, updated_at, completed_at, summary"
-)
+_SESSION_COLUMNS = "id, task, repo, status, issue, created_at, updated_at, completed_at, summary"
 
 
 @dataclass
@@ -35,7 +33,7 @@ def _validate_status(status: str) -> Status:
         return Status(status)
     except ValueError:
         valid = ", ".join(s.value for s in Status)
-        raise ValueError(f"Invalid status '{status}'. Must be one of: {valid}")
+        raise ValueError(f"Invalid status '{status}'. Must be one of: {valid}") from None
 
 
 # ---------------------------------------------------------------------------
@@ -46,7 +44,7 @@ def _validate_status(status: str) -> Status:
 def _fetch_session(conn: sqlite3.Connection, session_id: str) -> Session:
     """Fetch a single session row and convert to a Session dataclass."""
     row = conn.execute(
-        f"SELECT {_SESSION_COLUMNS} FROM session WHERE id = ?",  # noqa: S608
+        f"SELECT {_SESSION_COLUMNS} FROM session WHERE id = ?",
         (session_id,),
     ).fetchone()
     return _row_to_session(row)
@@ -62,11 +60,7 @@ def _row_to_session(row: sqlite3.Row) -> Session:
         issue=row["issue"],
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(row["updated_at"]),
-        completed_at=(
-            datetime.fromisoformat(row["completed_at"])
-            if row["completed_at"] is not None
-            else None
-        ),
+        completed_at=(datetime.fromisoformat(row["completed_at"]) if row["completed_at"] is not None else None),
         summary=row["summary"],
     )
 
@@ -106,8 +100,7 @@ def _create_note(
     worktree_int = int(note_worktree) if note_worktree is not None else None
 
     conn.execute(
-        "INSERT INTO note (session_id, content, created_at, repo, branch, cwd, worktree) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO note (session_id, content, created_at, repo, branch, cwd, worktree) VALUES (?, ?, ?, ?, ?, ?, ?)",
         (session_id, content, timestamp, note_repo, note_branch, note_cwd, worktree_int),
     )
 
@@ -130,18 +123,14 @@ def _resolve_session_id(conn: sqlite3.Connection, id_or_prefix: str) -> str:
     Raises:
         ValueError: If no match is found or the prefix is ambiguous.
     """
-    matches = conn.execute(
-        "SELECT id FROM session WHERE id LIKE ?", (f"{id_or_prefix}%",)
-    ).fetchall()
+    matches = conn.execute("SELECT id FROM session WHERE id LIKE ?", (f"{id_or_prefix}%",)).fetchall()
 
     if len(matches) == 0:
         raise ValueError(f"No session found matching '{id_or_prefix}'")
 
     if len(matches) > 1:
         matched_ids = ", ".join(row["id"] for row in matches)
-        raise ValueError(
-            f"Ambiguous prefix '{id_or_prefix}' matches: {matched_ids}"
-        )
+        raise ValueError(f"Ambiguous prefix '{id_or_prefix}' matches: {matched_ids}")
 
     return matches[0]["id"]
 
@@ -172,7 +161,7 @@ def register_session(
         note: Optional initial note content.
 
     Returns:
-        The newly created :class:`~claude_sessions.models.Session`.
+        The newly created :class:`~agtrk.models.Session`.
     """
     _validate_status(status)
 
@@ -229,8 +218,7 @@ def get_session(conn: sqlite3.Connection, id_or_prefix: str) -> SessionWithNotes
     session = _fetch_session(conn, session_id)
 
     note_rows = conn.execute(
-        "SELECT id, session_id, content, created_at, repo, branch, cwd, worktree "
-        "FROM note WHERE session_id = ? ORDER BY created_at ASC",
+        "SELECT id, session_id, content, created_at, repo, branch, cwd, worktree FROM note WHERE session_id = ? ORDER BY created_at ASC",
         (session_id,),
     ).fetchall()
 
@@ -267,7 +255,7 @@ def update_session(
         note: Note content to append to the session timeline (optional).
 
     Returns:
-        The updated :class:`~claude_sessions.models.Session`.
+        The updated :class:`~agtrk.models.Session`.
     """
     if status is not None:
         _validate_status(status)
@@ -286,8 +274,8 @@ def update_session(
         fields["issue"] = issue
 
     set_clause = ", ".join(f"{col} = ?" for col in fields)
-    values = list(fields.values()) + [session_id]
-    conn.execute(f"UPDATE session SET {set_clause} WHERE id = ?", values)  # noqa: S608
+    values = [*fields.values(), session_id]
+    conn.execute(f"UPDATE session SET {set_clause} WHERE id = ?", values)
 
     if note is not None:
         _create_note(conn, session_id, note, now, branch=branch)
@@ -309,7 +297,7 @@ def heartbeat(conn: sqlite3.Connection, id_or_prefix: str) -> Session:
         id_or_prefix: Exact session id or a unique prefix.
 
     Returns:
-        The updated :class:`~claude_sessions.models.Session`.
+        The updated :class:`~agtrk.models.Session`.
     """
     session_id = _resolve_session_id(conn, id_or_prefix)
     now = datetime.now().isoformat()
@@ -343,14 +331,13 @@ def complete_session(
         summary: Optional summary of what was accomplished.
 
     Returns:
-        The updated :class:`~claude_sessions.models.Session`.
+        The updated :class:`~agtrk.models.Session`.
     """
     session_id = _resolve_session_id(conn, id_or_prefix)
     now = datetime.now().isoformat()
 
     conn.execute(
-        "UPDATE session SET status = 'done', completed_at = ?, updated_at = ?, summary = ? "
-        "WHERE id = ?",
+        "UPDATE session SET status = 'done', completed_at = ?, updated_at = ?, summary = ? WHERE id = ?",
         (now, now, summary, session_id),
     )
     conn.commit()
@@ -378,7 +365,7 @@ def reopen_session(
         status: Status to transition to (default ``"implementing"``).
 
     Returns:
-        The updated :class:`~claude_sessions.models.Session`.
+        The updated :class:`~agtrk.models.Session`.
     """
     _validate_status(status)
 
@@ -386,8 +373,7 @@ def reopen_session(
     now = datetime.now().isoformat()
 
     conn.execute(
-        "UPDATE session SET status = ?, completed_at = NULL, updated_at = ? "
-        "WHERE id = ?",
+        "UPDATE session SET status = ?, completed_at = NULL, updated_at = ? WHERE id = ?",
         (status, now, session_id),
     )
     conn.commit()
@@ -412,7 +398,7 @@ def list_sessions(
         archived_only: When True, return only completed sessions.
 
     Returns:
-        A list of :class:`~claude_sessions.models.Session` objects.
+        A list of :class:`~agtrk.models.Session` objects.
     """
     if archived_only:
         where = "WHERE completed_at IS NOT NULL"
@@ -421,10 +407,7 @@ def list_sessions(
     else:
         where = "WHERE completed_at IS NULL"
 
-    rows = conn.execute(
-        f"SELECT {_SESSION_COLUMNS} "  # noqa: S608
-        f"FROM session {where} ORDER BY updated_at DESC"
-    ).fetchall()
+    rows = conn.execute(f"SELECT {_SESSION_COLUMNS} FROM session {where} ORDER BY updated_at DESC").fetchall()
 
     return [_row_to_session(row) for row in rows]
 
@@ -489,15 +472,13 @@ def search_sessions(
         "FROM session s "
         "LEFT JOIN note n ON n.session_id = s.id "
         "WHERE (s.task LIKE ? COLLATE NOCASE OR n.content LIKE ? COLLATE NOCASE) "
-        f"{archive_filter} ",  # noqa: S608
+        f"{archive_filter} ",
         (like_pattern, like_pattern),
     ).fetchall()
 
     # Fetch full session data for each match
     matched_ids = [r["id"] for r in id_rows]
-    rows = [
-        _fetch_session(conn, sid) for sid in matched_ids
-    ]
+    rows = [_fetch_session(conn, sid) for sid in matched_ids]
 
     results = []
     for session in sorted(rows, key=lambda s: s.updated_at, reverse=True):
@@ -508,10 +489,12 @@ def search_sessions(
             "ORDER BY created_at ASC",
             (session.id, like_pattern),
         ).fetchall()
-        results.append(SessionWithNotes(
-            session=session,
-            notes=[_row_to_note(nr) for nr in note_rows],
-        ))
+        results.append(
+            SessionWithNotes(
+                session=session,
+                notes=[_row_to_note(nr) for nr in note_rows],
+            )
+        )
 
     return results
 

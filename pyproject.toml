@@ -1,26 +1,69 @@
 [project]
-name = "claude-sessions"
-version = "0.7.5"
-description = "CLI tool for tracking Claude Code sessions"
+name = "agtrk"
+version = "1.0.0"
+description = "CLI tool for maintaining continuity across Claude Code conversations"
 readme = "README.md"
+license = "MIT"
 authors = [
-    { name = "David Jetelina", email = "david@djetelina.cz" }
+    { name = "David Jetelina" }
 ]
-requires-python = ">=3.12"
+requires-python = ">=3.10"
 dependencies = [
-    "typer>=0.15",
-    "rich>=13",
-    "textual>=8.1.1",
+    "typer~=0.15",
+    "rich~=14.0",
+    "textual~=8.1",
+]
+keywords = ["cli", "tui", "agent", "session", "tracking", "claude", "ai"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Topic :: Software Development",
+    "Topic :: Software Development :: User Interfaces",
+    "Topic :: Utilities",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
 ]
 
+[project.urls]
+Homepage = "https://github.com/djetelina/agtrk"
+Repository = "https://github.com/djetelina/agtrk.git"
+Issues = "https://github.com/djetelina/agtrk/issues"
+
 [project.scripts]
-agtrk = "claude_sessions.cli:app"
+agtrk = "agtrk.cli:app"
 
 [dependency-groups]
 dev = [
-    "pytest>=8",
+    "pytest>=8.4",
+    "ruff>=0.15",
+    "pre-commit>=4",
 ]
 
 [build-system]
 requires = ["uv_build>=0.10.11,<0.11.0"]
 build-backend = "uv_build"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 144
+
+[tool.ruff.lint]
+select = ["E", "I", "ASYNC", "B", "A", "PIE", "PT", "SIM", "PTH", "N", "W", "PL", "UP", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/agtrk/cli.py" = ["A002", "PLC0415", "PLR0913"]
+"src/agtrk/service.py" = ["PLR0913"]
+"src/agtrk/models.py" = ["PLC0415"]
+"src/agtrk/tui.py" = ["RUF012", "PLR2004"]
+"tests/**" = ["PLC0415", "PLR2004"]
+
+[tool.ruff.format]
+docstring-code-format = true
+docstring-code-line-length = 72

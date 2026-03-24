@@ -1,14 +1,15 @@
-"""Tests for claude_sessions.models"""
+"""Tests for agtrk.models"""
+
 from datetime import datetime
 
 import pytest
 
-from claude_sessions.models import Note, Session, Status, generate_slug
-
+from agtrk.models import Note, Session, Status, generate_slug
 
 # ---------------------------------------------------------------------------
 # Status enum
 # ---------------------------------------------------------------------------
+
 
 class TestStatus:
     def test_values(self):
@@ -32,10 +33,11 @@ class TestStatus:
 # generate_slug
 # ---------------------------------------------------------------------------
 
+
 class TestGenerateSlug:
     def test_basic(self):
-        result = generate_slug("EoD Day 4")
-        assert result.startswith("eod-day-4-")
+        result = generate_slug("Fix login bug")
+        assert result.startswith("fix-login-bug-")
 
     def test_special_chars(self):
         result = generate_slug("Fix bug #123 (urgent!)")
@@ -50,9 +52,9 @@ class TestGenerateSlug:
         assert result.startswith("fix-auth-")
 
     def test_no_collision(self):
-        result = generate_slug("EoD Day 4", existing_slugs={"eod-day-4-abc"})
-        assert result.startswith("eod-day-4-")
-        assert result != "eod-day-4-abc"
+        result = generate_slug("Fix login bug", existing_slugs={"fix-login-bug-abc"})
+        assert result.startswith("fix-login-bug-")
+        assert result != "fix-login-bug-abc"
 
     def test_unique_across_calls(self):
         results = {generate_slug("Same task") for _ in range(20)}
@@ -63,15 +65,16 @@ class TestGenerateSlug:
 # Session dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestSession:
     def _make(self, **overrides):
         now = datetime(2026, 3, 18, 12, 0, 0)
         defaults = dict(
-            id="eod-day-4",
-            task="EoD Day 4",
+            id="fix-login-bug",
+            task="Fix login bug",
             repo="some-repo",
             status=Status.planning,
-            issue="PLAT-1234",
+            issue="PROJ-1234",
             created_at=now,
             updated_at=now,
             completed_at=None,
@@ -81,11 +84,11 @@ class TestSession:
 
     def test_basic_creation(self):
         s = self._make()
-        assert s.id == "eod-day-4"
-        assert s.task == "EoD Day 4"
+        assert s.id == "fix-login-bug"
+        assert s.task == "Fix login bug"
         assert s.repo == "some-repo"
         assert s.status == Status.planning
-        assert s.issue == "PLAT-1234"
+        assert s.issue == "PROJ-1234"
         assert s.completed_at is None
 
     def test_repo_optional(self):
@@ -111,12 +114,13 @@ class TestSession:
 # Note dataclass
 # ---------------------------------------------------------------------------
 
+
 class TestNote:
     def _make(self, **overrides):
         now = datetime(2026, 3, 18, 12, 0, 0)
         defaults = dict(
             id=1,
-            session_id="eod-day-4",
+            session_id="fix-login-bug",
             content="Some note content",
             created_at=now,
             repo=None,
@@ -130,7 +134,7 @@ class TestNote:
     def test_basic_creation(self):
         n = self._make()
         assert n.id == 1
-        assert n.session_id == "eod-day-4"
+        assert n.session_id == "fix-login-bug"
         assert n.content == "Some note content"
 
     def test_id_is_int(self):

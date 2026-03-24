@@ -1,8 +1,9 @@
-"""Tests for claude_sessions.service"""
+"""Tests for agtrk.service"""
+
 import pytest
 
-from claude_sessions.models import Session, Status
-from claude_sessions.service import (
+from agtrk.models import Session, Status
+from agtrk.service import (
     SessionWithNotes,
     cleanup,
     complete_session,
@@ -19,9 +20,9 @@ from claude_sessions.service import (
 class TestRegisterSession:
     def test_creates_session_with_correct_fields(self, db):
         """register_session creates a session with slug, task, repo, and status."""
-        session = register_session(db, task="End of Day", repo="my-repo")
-        assert session.id.startswith("end-of-day-")
-        assert session.task == "End of Day"
+        session = register_session(db, task="Fix login bug", repo="my-repo")
+        assert session.id.startswith("fix-login-bug-")
+        assert session.task == "Fix login bug"
         assert session.repo == "my-repo"
         assert session.status == Status.planning
 
@@ -32,8 +33,8 @@ class TestRegisterSession:
 
     def test_with_issue(self, db):
         """register_session stores issue when provided."""
-        session = register_session(db, task="Fix bug", issue="PLAT-1234")
-        assert session.issue == "PLAT-1234"
+        session = register_session(db, task="Fix bug", issue="PROJ-1234")
+        assert session.issue == "PROJ-1234"
 
     def test_without_issue(self, db):
         """register_session sets issue to None when not provided."""
@@ -77,9 +78,7 @@ class TestRegisterSession:
     def test_persists_to_db(self, db):
         """Registered session is queryable from the database."""
         session = register_session(db, task="Persist me", repo="repo-x")
-        row = db.execute(
-            "SELECT id, task, repo FROM session WHERE id = ?", (session.id,)
-        ).fetchone()
+        row = db.execute("SELECT id, task, repo FROM session WHERE id = ?", (session.id,)).fetchone()
         assert row is not None
         assert row["task"] == "Persist me"
         assert row["repo"] == "repo-x"
@@ -95,8 +94,8 @@ class TestGetSession:
 
     def test_get_by_unique_prefix(self, db):
         """get_session resolves a unique prefix to the matching session."""
-        session = register_session(db, task="eod day 4")
-        result = get_session(db, "eod")
+        session = register_session(db, task="fix day 4")
+        result = get_session(db, "fix-day")
         assert result.id == session.id
 
     def test_get_by_unique_prefix_partial(self, db):
@@ -149,13 +148,11 @@ class TestGetSession:
 
     def test_returns_all_session_fields(self, db):
         """get_session returns all Session fields on the SessionWithNotes object."""
-        session = register_session(
-            db, task="Full fields", repo="my-repo", issue="PLAT-99", status="waiting"
-        )
+        session = register_session(db, task="Full fields", repo="my-repo", issue="PROJ-99", status="waiting")
         result = get_session(db, session.id)
         assert result.task == "Full fields"
         assert result.repo == "my-repo"
-        assert result.issue == "PLAT-99"
+        assert result.issue == "PROJ-99"
         assert result.status == Status.waiting
 
 
@@ -189,6 +186,7 @@ class TestUpdateSession:
     def test_update_bumps_timestamp(self, db):
         """updated_at increases after update."""
         import time
+
         session = register_session(db, task="Timestamp task")
         before = session.updated_at
         time.sleep(0.01)
@@ -198,8 +196,8 @@ class TestUpdateSession:
     def test_update_issue(self, db):
         """update_session sets issue field."""
         session = register_session(db, task="Jira task")
-        updated = update_session(db, session.id, issue="PLAT-9999")
-        assert updated.issue == "PLAT-9999"
+        updated = update_session(db, session.id, issue="PROJ-9999")
+        assert updated.issue == "PROJ-9999"
 
     def test_update_repo(self, db):
         """update_session sets repo field."""
@@ -218,6 +216,7 @@ class TestHeartbeat:
     def test_heartbeat_bumps_timestamp(self, db):
         """heartbeat updates updated_at."""
         import time
+
         session = register_session(db, task="Heartbeat task")
         before = session.updated_at
         time.sleep(0.01)
@@ -227,9 +226,7 @@ class TestHeartbeat:
 
     def test_heartbeat_does_not_change_fields(self, db):
         """heartbeat leaves task, repo, status unchanged."""
-        session = register_session(
-            db, task="Stable task", repo="stable-repo", status="waiting"
-        )
+        session = register_session(db, task="Stable task", repo="stable-repo", status="waiting")
         result = heartbeat(db, session.id)
         assert result.task == "Stable task"
         assert result.repo == "stable-repo"
@@ -310,9 +307,7 @@ class TestCleanup:
         s = register_session(db, task="Old done task")
         complete_session(db, s.id)
         old_date = "2025-01-01T00:00:00"
-        db.execute(
-            "UPDATE session SET completed_at = ? WHERE id = ?", (old_date, s.id)
-        )
+        db.execute("UPDATE session SET completed_at = ? WHERE id = ?", (old_date, s.id))
         db.commit()
 
         count = cleanup(db, older_than_days=30)
@@ -334,9 +329,7 @@ class TestCleanup:
         """Active sessions with old updated_at are not deleted by cleanup."""
         s = register_session(db, task="Old active task")
         old_date = "2025-01-01T00:00:00"
-        db.execute(
-            "UPDATE session SET updated_at = ? WHERE id = ?", (old_date, s.id)
-        )
+        db.execute("UPDATE session SET updated_at = ? WHERE id = ?", (old_date, s.id))
         db.commit()
 
         count = cleanup(db, older_than_days=30)
@@ -349,16 +342,12 @@ class TestCleanup:
         s = register_session(db, task="Session with notes", note="A note")
         complete_session(db, s.id)
         old_date = "2025-01-01T00:00:00"
-        db.execute(
-            "UPDATE session SET completed_at = ? WHERE id = ?", (old_date, s.id)
-        )
+        db.execute("UPDATE session SET completed_at = ? WHERE id = ?", (old_date, s.id))
         db.commit()
 
         count = cleanup(db, older_than_days=30)
         assert count == 1
-        note_rows = db.execute(
-            "SELECT id FROM note WHERE session_id = ?", (s.id,)
-        ).fetchall()
+        note_rows = db.execute("SELECT id FROM note WHERE session_id = ?", (s.id,)).fetchall()
         assert note_rows == []
 
 

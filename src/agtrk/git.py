@@ -1,4 +1,4 @@
-"""Git context auto-detection for claude-sessions."""
+"""Git context auto-detection for agtrk."""
 
 import subprocess
 from pathlib import Path
@@ -12,6 +12,7 @@ def _run_git(*args: str) -> str | None:
             capture_output=True,
             text=True,
             timeout=5,
+            check=False,
         )
         if result.returncode != 0:
             return None
@@ -45,7 +46,7 @@ def _parse_remote_url(url: str) -> str:
         path = parts[1] if len(parts) > 1 else path
     else:
         # SSH-style: git@host:org/repo.git
-        path = url.split(":")[-1]
+        path = url.rsplit(":", maxsplit=1)[-1]
 
     if path.endswith(".git"):
         path = path[:-4]
@@ -98,7 +99,7 @@ def repo_display_name(repo: str) -> str:
     'widgets' -> 'widgets'
     """
     parts = repo.split("/")
-    if len(parts) <= 2:
+    if len(parts) <= 2:  # noqa: PLR2004
         # org/repo or plain name — show just the repo name
         return parts[-1]
     # Path fallback (3+ segments) — show last 2 with ... prefix

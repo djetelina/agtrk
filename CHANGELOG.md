@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [1.0.0] - 2026-03-24
+
+### Changed
+
+- **Breaking:** Package renamed from `claude-sessions` to `agtrk`
+- **Breaking:** Environment variable renamed from `CLAUDE_SESSIONS_DB` to `AGTRK_DB`
+- **Breaking:** Database path moved from `~/.local/share/claude-sessions/` to `~/.local/share/agtrk/` (auto-migrated on first run)
+- **Breaking:** Minimum `rich` dependency bumped to `~=14.0` (required by textual)
+- Lowered Python requirement from 3.12+ to 3.10+
+- Runtime dependencies tightened to compatible-release constraints (`~=`)
+
+### Added
+
+- MIT LICENSE file
+- Ruff linting and formatting configuration
+- Pre-commit hooks (ruff, trailing whitespace, EOF fixer, YAML/TOML checks)
+- GitHub Actions CI (ruff, pytest across Python 3.10–3.14, PyPI publish)
+- Dependabot for weekly uv dependency updates
+- Auto-migration of database from legacy `claude-sessions` path
+
+### Removed
+
+- `.python-version` file (any supported Python version works)
+
 ## [0.7.5] - 2026-03-22
 
 ### Changed

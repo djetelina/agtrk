@@ -1,9 +1,10 @@
-"""Tests for claude_sessions.db"""
+"""Tests for agtrk.db"""
+
 import sqlite3
 
 import pytest
 
-from claude_sessions.db import DB_SCHEMA_VERSION, get_db
+from agtrk.db import DB_SCHEMA_VERSION, get_db
 
 
 class TestSchemaCreation:
@@ -16,23 +17,17 @@ class TestSchemaCreation:
 
     def test_creates_session_table(self, db):
         """session table exists after get_db."""
-        row = db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='session'"
-        ).fetchone()
+        row = db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='session'").fetchone()
         assert row is not None
 
     def test_creates_note_table(self, db):
         """note table exists after get_db."""
-        row = db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='note'"
-        ).fetchone()
+        row = db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='note'").fetchone()
         assert row is not None
 
     def test_creates_schema_version_table(self, db):
         """schema_version table exists after get_db."""
-        row = db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'"
-        ).fetchone()
+        row = db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='schema_version'").fetchone()
         assert row is not None
 
     def test_schema_version_is_current(self, db):
@@ -57,9 +52,7 @@ class TestSchemaCreation:
         conn.close()
 
         conn2 = get_db(tmp_db)
-        row = conn2.execute(
-            "SELECT id FROM session WHERE id='test-id'"
-        ).fetchone()
+        row = conn2.execute("SELECT id FROM session WHERE id='test-id'").fetchone()
         conn2.close()
         assert row is not None
         assert row[0] == "test-id"
@@ -78,6 +71,7 @@ class TestMigration2:
     def test_migration_from_v1_to_v2(self, tmp_db):
         """Existing v1 database gets migrated to v2 with new note columns."""
         import sqlite3 as _sqlite3
+
         conn = _sqlite3.connect(str(tmp_db))
         conn.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
         conn.execute("INSERT INTO schema_version (version) VALUES (1)")
@@ -123,9 +117,7 @@ class TestMigration:
         """Manually create schema_version at version=0, then get_db migrates to current."""
         # Bootstrap a minimal db with only the schema_version table at version 0
         conn = sqlite3.connect(str(tmp_db))
-        conn.execute(
-            "CREATE TABLE schema_version (version INTEGER NOT NULL)"
-        )
+        conn.execute("CREATE TABLE schema_version (version INTEGER NOT NULL)")
         conn.execute("INSERT INTO schema_version (version) VALUES (0)")
         conn.commit()
         conn.close()
@@ -137,12 +129,7 @@ class TestMigration:
         assert version_row[0] == DB_SCHEMA_VERSION
 
         # Verify tables were created by migration
-        tables = {
-            row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
-        }
+        tables = {row[0] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
         assert "session" in tables
         assert "note" in tables
 

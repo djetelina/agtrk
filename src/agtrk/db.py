@@ -1,11 +1,12 @@
-"""Database access layer for claude-sessions."""
+"""Database access layer for agtrk."""
 
 import os
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-DEFAULT_DB_PATH = Path.home() / ".local" / "share" / "claude-sessions" / "sessions.db"
+DEFAULT_DB_PATH = Path.home() / ".local" / "share" / "agtrk" / "sessions.db"
+_LEGACY_DB_PATH = Path.home() / ".local" / "share" / "claude-sessions" / "sessions.db"
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -64,7 +65,7 @@ def get_db(db_path: Path | None = None) -> sqlite3.Connection:
     """Open (and initialise) the SQLite database.
 
     Resolution order for the database path:
-    1. ``CLAUDE_SESSIONS_DB`` environment variable
+    1. ``AGTRK_DB`` environment variable
     2. *db_path* argument
     3. :data:`DEFAULT_DB_PATH`
 
@@ -79,13 +80,17 @@ def get_db(db_path: Path | None = None) -> sqlite3.Connection:
         An open :class:`sqlite3.Connection` with ``row_factory`` set to
         :attr:`sqlite3.Row`.
     """
-    env_path = os.environ.get("CLAUDE_SESSIONS_DB")
+    env_path = os.environ.get("AGTRK_DB")
     if env_path:
         resolved = Path(env_path)
     elif db_path is not None:
         resolved = db_path
     else:
         resolved = DEFAULT_DB_PATH
+        # Migrate from old claude-sessions location
+        if not resolved.exists() and _LEGACY_DB_PATH.exists():
+            resolved.parent.mkdir(parents=True, exist_ok=True)
+            _LEGACY_DB_PATH.rename(resolved)
 
     resolved.parent.mkdir(parents=True, exist_ok=True)
 
@@ -138,7 +143,5 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         for statement in migration_statements:
             conn.execute(statement)
 
-    conn.execute(
-        "UPDATE schema_version SET version = ?", (DB_SCHEMA_VERSION,)
-    )
+    conn.execute("UPDATE schema_version SET version = ?", (DB_SCHEMA_VERSION,))
     conn.commit()

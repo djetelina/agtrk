@@ -1,4 +1,4 @@
-"""TUI dashboard for claude-sessions."""
+"""TUI dashboard for agtrk."""
 
 import math
 from datetime import datetime, timedelta
@@ -11,10 +11,10 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Label, Static
 
-from claude_sessions.db import open_db
-from claude_sessions.git import repo_display_name
-from claude_sessions.models import Session, Status
-from claude_sessions.service import get_session, list_sessions
+from agtrk.db import open_db
+from agtrk.git import repo_display_name
+from agtrk.models import Session, Status
+from agtrk.service import get_session, list_sessions
 
 REFRESH_INTERVAL = 30
 FRESH_THRESHOLD = timedelta(minutes=35)
@@ -133,6 +133,7 @@ class BreathingDot(Static):
 # Header (tofuref-style)
 # ---------------------------------------------------------------------------
 
+
 class HeaderStatus(Container):
     DEFAULT_CSS = """
     HeaderStatus {
@@ -192,10 +193,7 @@ class HeaderStatus(Container):
         counts: dict[Status, int] = {}
         for s in sessions:
             counts[s.status] = counts.get(s.status, 0) + 1
-        stats = "  ".join(
-            f"{STATUS_EMOJI.get(st, '')} {counts.get(st, 0)}"
-            for st in KANBAN_STATUSES
-        )
+        stats = "  ".join(f"{STATUS_EMOJI.get(st, '')} {counts.get(st, 0)}" for st in KANBAN_STATUSES)
         self._stats_label.update(stats)
         self._view_label.update(view)
         self._archived_label.update(f"archived: {'on' if archived else 'off'}")
@@ -213,16 +211,13 @@ class HeaderLogo(Static):
         # Middle: │  agtrk  │  (visible: 1+2+5+2+1 = 11 chars)
         # Top:   __┌─────┐    (2 spaces + box of 7 = 9, plus ┐ at pos 9)
         # Must match: positions 2-8 are dashes (indices of inner content)
-        return (
-            "[$accent] ┌─────┐\n"
-            "[$secondary]│[/$secondary] [$primary]agtrk[/$primary] [$secondary]│[/$secondary]\n"
-            "[$accent] └─────┘"
-        )
+        return "[$accent] ┌─────┐\n[$secondary]│[/$secondary] [$primary]agtrk[/$primary] [$secondary]│[/$secondary]\n[$accent] └─────┘"
 
 
 # ---------------------------------------------------------------------------
 # Detail modal
 # ---------------------------------------------------------------------------
+
 
 class DetailScreen(ModalScreen):
     DEFAULT_CSS = """
@@ -259,7 +254,8 @@ def _build_detail_content(session_id: str) -> str:
         f"  [dim]Heartbeat[/dim] {_time_ago(session.updated_at)}  [dim italic]{session.updated_at:%Y-%m-%d %H:%M}[/dim italic]",
     ]
     if session.completed_at:
-        lines.append(f"  [dim]Done[/dim]      {_time_ago(session.completed_at)}  [dim italic]{session.completed_at:%Y-%m-%d %H:%M}[/dim italic]")
+        completed = session.completed_at
+        lines.append(f"  [dim]Done[/dim]      {_time_ago(completed)}  [dim italic]{completed:%Y-%m-%d %H:%M}[/dim italic]")
     if session.summary:
         lines.append("")
         lines.append("[bold]Summary[/bold]")
@@ -295,6 +291,7 @@ def _build_detail_content(session_id: str) -> str:
 # ---------------------------------------------------------------------------
 # Kanban cards
 # ---------------------------------------------------------------------------
+
 
 class CardItem(Static):
     DEFAULT_CSS = """
@@ -394,7 +391,8 @@ class CardColumn(VerticalScroll):
         scrollbar-size: 0 0;
     }
     CardColumn:focus .col-header { background: $accent; color: auto; }
-    .col-header { width: 1fr; height: 1; text-align: center; text-style: bold; background: $primary-darken-2; margin: 0 0 1 0; border-left: vkey $accent; }
+    .col-header { width: 1fr; height: 1; text-align: center; text-style: bold;
+        background: $primary-darken-2; margin: 0 0 1 0; border-left: vkey $accent; }
     CardColumn.first-col .col-header { border-left: none; }
     """
     can_focus = True
@@ -434,6 +432,7 @@ class CardColumn(VerticalScroll):
 # Main app
 # ---------------------------------------------------------------------------
 
+
 class SessionDashboard(App):
     TITLE = "agtrk"
     CSS = """
@@ -472,9 +471,7 @@ class SessionDashboard(App):
 
     def _refresh_header(self) -> None:
         view = "kanban" if self.kanban_view else "table"
-        self.query_one(HeaderStatus).update_status(
-            self._sessions, view, self.show_archived
-        )
+        self.query_one(HeaderStatus).update_status(self._sessions, view, self.show_archived)
 
     def _load_data(self) -> None:
         with open_db() as conn:
@@ -483,7 +480,7 @@ class SessionDashboard(App):
         new_ids = [s.id for s in new_sessions]
         changed = old_ids != new_ids or any(
             (a.status, a.updated_at, a.task, a.repo) != (b.status, b.updated_at, b.task, b.repo)
-            for a, b in zip(self._sessions, new_sessions)
+            for a, b in zip(self._sessions, new_sessions, strict=False)
         )
         self._sessions = new_sessions
         if changed:
@@ -507,10 +504,7 @@ class SessionDashboard(App):
         table.add_column("Issue", width=10)
 
         for s in self._sessions:
-            if s.status == Status.done:
-                style = "dim italic"
-            else:
-                style = ""
+            style = "dim italic" if s.status == Status.done else ""
             emoji = STATUS_EMOJI.get(s.status, "")
             task = _truncate(s.task, task_width)
             table.add_row(

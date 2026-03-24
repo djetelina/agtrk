@@ -1,4 +1,4 @@
-"""Data models for claude-sessions."""
+"""Data models for agtrk."""
 
 import re
 from dataclasses import dataclass
@@ -46,6 +46,7 @@ def _random_suffix(length: int = 3) -> str:
     """Generate a short random alphanumeric suffix."""
     import secrets
     import string
+
     alphabet = string.ascii_lowercase + string.digits
     return "".join(secrets.choice(alphabet) for _ in range(length))
 

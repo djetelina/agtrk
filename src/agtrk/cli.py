@@ -1,4 +1,4 @@
-"""CLI commands for claude-sessions."""
+"""CLI commands for agtrk."""
 
 import io
 import json
@@ -9,11 +9,10 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from claude_sessions.models import Status
-
-from claude_sessions.db import open_db
-from claude_sessions.git import detect_repo, repo_display_name
-from claude_sessions.service import (
+from agtrk.db import open_db
+from agtrk.git import detect_repo, repo_display_name
+from agtrk.models import Status
+from agtrk.service import (
     cleanup,
     complete_session,
     delete_session,
@@ -27,7 +26,7 @@ from claude_sessions.service import (
 )
 
 app = typer.Typer(
-    help="Track agent sessions.",
+    help="Maintain continuity across Claude Code conversations.",
     invoke_without_command=True,
     rich_markup_mode="rich",
 )
@@ -41,7 +40,7 @@ def _handle_error(e: ValueError) -> NoReturn:
 
 def _version_callback(value: bool) -> None:
     if value:
-        from claude_sessions import __version__
+        from agtrk import __version__
 
         typer.echo(f"agtrk {__version__}")
         raise typer.Exit
@@ -57,7 +56,9 @@ def _build_session_table(sessions: list) -> Table:
     table.add_column("Issue")
     for s in sessions:
         table.add_row(
-            s.id, str(s.status), s.task,
+            s.id,
+            str(s.status),
+            s.task,
             repo_display_name(s.repo) if s.repo else "",
             s.issue or "",
         )
@@ -91,8 +92,11 @@ def _print_list(archived: bool, show_all: bool, verbose: bool = False) -> None:
         table.add_column("Updated")
         for s in sessions:
             table.add_row(
-                s.id, str(s.status), s.task,
-                repo_display_name(s.repo) if s.repo else "", s.issue or "",
+                s.id,
+                str(s.status),
+                s.task,
+                repo_display_name(s.repo) if s.repo else "",
+                s.issue or "",
                 f"{s.updated_at:%Y-%m-%d %H:%M}",
             )
     else:
@@ -176,7 +180,7 @@ def search(
 @app.command()
 def tui() -> None:
     """Open the TUI dashboard."""
-    from claude_sessions.tui import run_tui
+    from agtrk.tui import run_tui
 
     run_tui()
 
@@ -215,7 +219,7 @@ a blocker, or a status change? What would help a future session pick up this wor
 If anything comes to mind, run `agtrk update <id> --note "..." --status <status>`.
 
 Also check: does the task description still match what you're doing? Has an issue/ticket \
-been created or linked? If so, run `agtrk update <id> --task "..." --issue PLAT-1234`. \
+been created or linked? If so, run `agtrk update <id> --task "..." --issue PROJ-1234`. \
 If nothing changed, skip."""
 
 INJECT_INSTRUCTIONS = """\
@@ -326,19 +330,15 @@ def install(
 
     for event in ("SessionStart", "PreCompact"):
         entries = hooks.setdefault(event, [])
-        already = any(
-            "agtrk inject" in h.get("command", "")
-            for entry in entries
-            for h in entry.get("hooks", [])
-        )
+        already = any("agtrk inject" in h.get("command", "") for entry in entries for h in entry.get("hooks", []))
         if not already:
             entries.append(AGTRK_HOOK_ENTRY)
 
     # Ensure agtrk commands are allowed without prompting
-    AGTRK_PERMISSION = "Bash(agtrk:*)"
+    agtrk_permission = "Bash(agtrk:*)"
     allow = data.setdefault("permissions", {}).setdefault("allow", [])
-    if AGTRK_PERMISSION not in allow:
-        allow.append(AGTRK_PERMISSION)
+    if agtrk_permission not in allow:
+        allow.append(agtrk_permission)
 
     settings_path.write_text(json.dumps(data, indent=2) + "\n")
     console.print(f"Installed agtrk hooks into {settings_path}")
@@ -364,10 +364,7 @@ def uninstall(
     hooks = data.get("hooks", {})
     for event in ("SessionStart", "PreCompact"):
         if event in hooks:
-            hooks[event] = [
-                entry for entry in hooks[event]
-                if not any("agtrk inject" in h.get("command", "") for h in entry.get("hooks", []))
-            ]
+            hooks[event] = [entry for entry in hooks[event] if not any("agtrk inject" in h.get("command", "") for h in entry.get("hooks", []))]
 
     allow = data.get("permissions", {}).get("allow", [])
     if "Bash(agtrk:*)" in allow:
