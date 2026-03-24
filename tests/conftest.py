@@ -33,6 +33,8 @@ def tmp_db_env(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 def git_repo(tmp_path, monkeypatch):
     """Create a git repo with one commit, cd into it."""
     subprocess.run(["git", "init", str(tmp_path)], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.email", "test@test.com"], check=True, capture_output=True)
+    subprocess.run(["git", "-C", str(tmp_path), "config", "user.name", "Test"], check=True, capture_output=True)
     subprocess.run(["git", "-C", str(tmp_path), "commit", "--allow-empty", "-m", "init"], check=True, capture_output=True)
     monkeypatch.chdir(tmp_path)
     return tmp_path
