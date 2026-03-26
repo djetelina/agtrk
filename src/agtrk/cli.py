@@ -63,6 +63,20 @@ def _version_callback(value: bool) -> None:
         raise typer.Exit
 
 
+def _build_inject_session_list(sessions: list) -> str:
+    """Build a compact plain-text session list for agent inject output."""
+    lines = []
+    for s in sessions:
+        parts = [s.id, s.status, s.task]
+        repo = repo_display_name(s.repo) if s.repo else None
+        if repo:
+            parts.append(f"repo:{repo}")
+        if s.issue:
+            parts.append(f"issue:{s.issue}")
+        lines.append(" | ".join(parts))
+    return "\n".join(lines)
+
+
 def _build_session_table(sessions: list) -> Table:
     """Build a Rich table of sessions (shared by list and inject)."""
     table = Table(show_header=True)
@@ -341,7 +355,7 @@ def inject() -> None:
     hook_console.print()
     if sessions:
         hook_console.print("SESSION TRACKER — active work:")
-        hook_console.print(_build_session_table(sessions))
+        hook_console.print(_build_inject_session_list(sessions))
     else:
         hook_console.print("SESSION TRACKER — no active sessions.")
     typer.echo(buf.getvalue(), nl=False)

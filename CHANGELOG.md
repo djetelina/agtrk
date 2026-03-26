@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Inject session table now uses plain text (`id | status | task`) instead of Rich box-drawing characters — saves tokens when consumed by agents
+
 ## [1.2.0] - 2026-03-26
 
 ### Added
