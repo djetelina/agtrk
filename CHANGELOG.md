@@ -9,18 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Project knowledge system — per-repo knowledge entries that agents can look up instead of re-exploring
-  - `agtrk learn --kind <kind> --title "..." "content"` — store knowledge
-  - `agtrk recall --search <topic> --kind <kind>` — look up knowledge
-  - `agtrk forget <id>` — delete a knowledge entry
-  - `agtrk update-knowledge <id>` — update an existing entry
-  - Knowledge kinds: architecture, decision, convention, exploration
-- Inject prompt now teaches agents about the knowledge system and encourages proactive use
-- Inject prompt explicitly ties `agtrk learn` to Explore subagent results as a concrete trigger
-- Feature flags system — per-feature opt-in for experimental features
-  - `agtrk feature enable <name>` / `agtrk feature disable <name>` — toggle features
-  - `agtrk feature list` — show all features and their status
-  - Project knowledge inject instructions now gated behind `knowledge` feature flag (disabled by default)
+- Project knowledge system — per-repo knowledge entries that agents can store and look up instead of re-exploring the codebase (`learn`, `recall`, `forget`, `update-knowledge`). Inject prompt teaches agents to use it proactively. Gated behind the `knowledge` feature flag (disabled by default).
+- Feature flags — DB-backed opt-in for experimental features (`agtrk feature enable/disable/list`)
 
 ### Changed
 
