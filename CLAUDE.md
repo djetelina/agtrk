@@ -28,6 +28,7 @@ When releasing:
 1. Bump the version in `pyproject.toml` (single source of truth — `__version__` is derived via `importlib.metadata`).
 2. Move `[Unreleased]` entries in `CHANGELOG.md` into a new `[X.Y.Z] - YYYY-MM-DD` section.
 3. Commit the version bump + changelog as its own commit (e.g., `release: vX.Y.Z`).
+4. Create a GitHub release — this triggers CI to publish to PyPI.
 
 ## Prompt Decision Records
 
