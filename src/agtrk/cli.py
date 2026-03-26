@@ -310,6 +310,8 @@ for stable, reusable facts and save each one. Treat this like the register/cron 
 - If you discover a knowledge entry is outdated, update it immediately:
   `agtrk update-knowledge <id> "corrected content"`
 - If an entry is no longer relevant, remove it: `agtrk forget <id>`
+- Do NOT learn things already documented in CLAUDE.md — knowledge entries are for \
+facts discovered during work, not duplicates of existing project docs.
 
 
 Knowledge kinds:
