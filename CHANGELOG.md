@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-03-26
+
 ### Added
 
 - Project knowledge system — per-repo knowledge entries that agents can store and look up instead of re-exploring the codebase (`learn`, `recall`, `forget`, `update-knowledge`). Inject prompt teaches agents to use it proactively. Gated behind the `knowledge` feature flag (disabled by default).
