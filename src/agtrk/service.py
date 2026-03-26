@@ -11,7 +11,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 
 from agtrk.git import detect_branch, detect_cwd, detect_repo, detect_worktree
-from agtrk.models import Kind, Knowledge, Note, Session, Status, generate_slug
+from agtrk.models import Feature, Kind, Knowledge, Note, Session, Status, generate_slug
 
 _SESSION_COLUMNS = "id, task, repo, status, issue, created_at, updated_at, completed_at, summary"
 
@@ -36,6 +36,12 @@ def _validate_enum(value: str, enum_cls: type[StrEnum]) -> StrEnum:
         label = enum_cls.__name__.lower()
         valid = ", ".join(m.value for m in enum_cls)
         raise ValueError(f"Invalid {label} '{value}'. Must be one of: {valid}") from None
+
+
+def _like_pattern(term: str) -> str:
+    """Escape SQL LIKE special chars and wrap in %...%."""
+    escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 # ---------------------------------------------------------------------------
@@ -465,7 +471,7 @@ def search_sessions(
     Returns:
         A list of :class:`SessionWithNotes`, each with only matching notes.
     """
-    like_pattern = f"%{query}%"
+    like_pattern = _like_pattern(query)
 
     # Find session IDs where task or any note matches
     archive_filter = "" if include_archived else "AND s.completed_at IS NULL"
@@ -473,7 +479,7 @@ def search_sessions(
         "SELECT DISTINCT s.id "
         "FROM session s "
         "LEFT JOIN note n ON n.session_id = s.id "
-        "WHERE (s.task LIKE ? COLLATE NOCASE OR n.content LIKE ? COLLATE NOCASE) "
+        "WHERE (s.task LIKE ? ESCAPE '\\' COLLATE NOCASE OR n.content LIKE ? ESCAPE '\\' COLLATE NOCASE) "
         f"{archive_filter} ",
         (like_pattern, like_pattern),
     ).fetchall()
@@ -487,7 +493,7 @@ def search_sessions(
         # Fetch only matching notes for this session
         note_rows = conn.execute(
             "SELECT id, session_id, content, created_at, repo, branch, cwd, worktree "
-            "FROM note WHERE session_id = ? AND content LIKE ? COLLATE NOCASE "
+            "FROM note WHERE session_id = ? AND content LIKE ? ESCAPE '\\' COLLATE NOCASE "
             "ORDER BY created_at ASC",
             (session.id, like_pattern),
         ).fetchall()
@@ -592,10 +598,9 @@ def recall(
         params.append(kind)
 
     if search is not None:
-        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        like_pattern = f"%{escaped}%"
+        pattern = _like_pattern(search)
         conditions.append("(title LIKE ? ESCAPE '\\' COLLATE NOCASE OR content LIKE ? ESCAPE '\\' COLLATE NOCASE)")
-        params.extend([like_pattern, like_pattern])
+        params.extend([pattern, pattern])
 
     where = " AND ".join(conditions)
     rows = conn.execute(
@@ -718,6 +723,41 @@ def update_knowledge(
         created_at=datetime.fromisoformat(row["created_at"]),
         updated_at=datetime.fromisoformat(now),
     )
+
+
+# ---------------------------------------------------------------------------
+# Feature flags
+# ---------------------------------------------------------------------------
+
+
+def set_feature(conn: sqlite3.Connection, name: str, enabled: bool) -> None:
+    """Enable or disable a feature flag."""
+    _validate_enum(name, Feature)
+    conn.execute(
+        "INSERT INTO feature (name, enabled) VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET enabled = excluded.enabled",
+        (name, int(enabled)),
+    )
+    conn.commit()
+
+
+def is_feature_enabled(conn: sqlite3.Connection, name: str) -> bool:
+    """Check if a feature flag is enabled."""
+    _validate_enum(name, Feature)
+    row = conn.execute("SELECT enabled FROM feature WHERE name = ?", (name,)).fetchone()
+    if row is None:
+        return False
+    return bool(row["enabled"])
+
+
+def list_features(conn: sqlite3.Connection) -> list[tuple[Feature, bool]]:
+    """List all known features with their enabled state.
+
+    Iterates over the Feature enum so newly added members appear
+    even without a DB row (defaulting to disabled).
+    """
+    rows = conn.execute("SELECT name, enabled FROM feature").fetchall()
+    db_state = {row["name"]: bool(row["enabled"]) for row in rows}
+    return [(f, db_state.get(f.value, False)) for f in Feature]
 
 
 # ---------------------------------------------------------------------------

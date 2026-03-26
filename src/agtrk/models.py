@@ -33,6 +33,10 @@ _KIND_DESCRIPTIONS: dict[Kind, str] = {
 }
 
 
+class Feature(StrEnum):
+    knowledge = "knowledge"
+
+
 @dataclass
 class Session:
     id: str
