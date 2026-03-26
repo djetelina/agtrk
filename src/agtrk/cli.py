@@ -482,7 +482,6 @@ def update(
             update_session(conn, id_or_prefix=id, task=task, repo=repo, status=status, issue=issue, note=note, branch=branch)
     except ValueError as e:
         _handle_error(e)
-    console.print(f"Updated session: {id}")
 
 
 @app.command(name="heartbeat", rich_help_panel="Agent commands")
@@ -508,7 +507,6 @@ def complete(
             complete_session(conn, id_or_prefix=id, summary=summary)
     except ValueError as e:
         _handle_error(e)
-    console.print(f"Completed session: {id}")
 
 
 @app.command(rich_help_panel="Agent commands")
@@ -522,7 +520,6 @@ def reopen(
             reopen_session(conn, id_or_prefix=id, status=status)
     except ValueError as e:
         _handle_error(e)
-    console.print(f"Reopened session: {id}")
 
 
 # --- Knowledge commands ---

@@ -94,7 +94,6 @@ def test_update(tmp_db_env):
 
     result = runner.invoke(app, ["update", session_id, "--status", "implementing", "--note", "started"])
     assert result.exit_code == 0
-    assert "Updated session:" in result.stdout
 
 
 def test_heartbeat(tmp_db_env):
