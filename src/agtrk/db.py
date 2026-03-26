@@ -73,6 +73,15 @@ MIGRATIONS: list[list[str]] = [
         CREATE INDEX IF NOT EXISTS idx_knowledge_repo ON knowledge (repo)
         """,
     ],
+    # Migration 6 — feature flags table
+    [
+        """
+        CREATE TABLE IF NOT EXISTS feature (
+            name    TEXT    PRIMARY KEY,
+            enabled INTEGER NOT NULL DEFAULT 0
+        )
+        """,
+    ],
 ]
 
 DB_SCHEMA_VERSION: int = len(MIGRATIONS)

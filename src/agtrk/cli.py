@@ -11,7 +11,7 @@ from rich.table import Table
 
 from agtrk.db import open_db
 from agtrk.git import detect_repo, repo_display_name
-from agtrk.models import Kind, Status
+from agtrk.models import Feature, Kind, Status
 from agtrk.service import (
     cleanup,
     complete_session,
@@ -20,12 +20,15 @@ from agtrk.service import (
     get_knowledge,
     get_session,
     heartbeat,
+    is_feature_enabled,
     learn,
+    list_features,
     list_sessions,
     recall,
     register_session,
     reopen_session,
     search_sessions,
+    set_feature,
     update_knowledge,
     update_session,
 )
@@ -236,7 +239,7 @@ Also check: does the task description still match what you're doing? Has an issu
 been created or linked? If so, run `agtrk update <id> --task "..." --issue PROJ-1234`. \
 If nothing changed, skip."""
 
-INJECT_INSTRUCTIONS = """\
+INJECT_INSTRUCTIONS_BASE = """\
 DO NOT respond to the user until you have done ALL of the following:
 1. Register or resume:
    - Resuming existing work: run `agtrk show <id>` and read the notes, then run `agtrk update <id> --status implementing`
@@ -282,7 +285,13 @@ Search:
 - `agtrk search <query> --all` to include archived sessions
 
 Backlog:
-- `agtrk register --task "..." --status todo` for work you notice but shouldn't act on now
+- `agtrk register --task "..." --status todo` for work you notice but shouldn't act on now""".format(
+    cron_prompt=INJECT_CRON_PROMPT,
+    statuses="|".join(s.value for s in Status if s != Status.done),
+)
+
+
+INJECT_INSTRUCTIONS_KNOWLEDGE = """
 
 Project knowledge (auto-scoped to current repo — NOT the same as auto-memory; \
 auto-memory rules about "don't save project structure" do NOT apply here):
@@ -305,8 +314,6 @@ for stable, reusable facts and save each one. Treat this like the register/cron 
 
 Knowledge kinds:
   {kinds}""".format(
-    cron_prompt=INJECT_CRON_PROMPT,
-    statuses="|".join(s.value for s in Status if s != Status.done),
     kinds="\n  ".join(f"{k.value:14s} — {k.description}" for k in Kind),
 )
 
@@ -322,6 +329,7 @@ def inject() -> None:
 
     with open_db() as conn:
         sessions = list_sessions(conn, include_archived=False)
+        knowledge_enabled = is_feature_enabled(conn, Feature.knowledge)
 
     if sessions:
         hook_console.print("SESSION TRACKER — active work:")
@@ -330,7 +338,10 @@ def inject() -> None:
         hook_console.print("SESSION TRACKER — no active sessions.")
 
     hook_console.print()
-    hook_console.print(INJECT_INSTRUCTIONS)
+    instructions = INJECT_INSTRUCTIONS_BASE
+    if knowledge_enabled:
+        instructions += INJECT_INSTRUCTIONS_KNOWLEDGE
+    hook_console.print(instructions)
     typer.echo(buf.getvalue(), nl=False)
 
 
@@ -495,7 +506,7 @@ def reopen(
 @app.command(name="learn", rich_help_panel="Agent commands")
 def learn_cmd(
     content: str = typer.Argument(help="Knowledge content"),
-    kind: str = typer.Option(..., "--kind", help="Knowledge kind (architecture, decision, convention, exploration)"),
+    kind: str = typer.Option(..., "--kind", help=f"Knowledge kind ({', '.join(k.value for k in Kind)})"),
     title: str = typer.Option(..., "--title", help="Short searchable title"),
     repo: str | None = typer.Option(None, "--repo", help="Repository name (auto-detected)"),
 ) -> None:
@@ -509,37 +520,40 @@ def learn_cmd(
     console.print(f"Learned #{entry.id}: {entry.title}")
 
 
+def _print_knowledge_entry(entry, show_content: bool = False) -> None:
+    """Print a single knowledge entry."""
+    console.print(f"[bold]#{entry.id}[/bold] \\[{entry.kind}] {entry.title}")
+    if show_content:
+        console.print(f"  {entry.content}")
+
+
 @app.command(name="recall", rich_help_panel="Agent commands")
 def recall_cmd(
     ids: list[int] = typer.Argument(None, help="Knowledge entry IDs (shows full detail)"),
-    kind: str | None = typer.Option(None, "--kind", help="Filter by kind"),
+    kind: str | None = typer.Option(None, "--kind", help=f"Filter by kind ({', '.join(k.value for k in Kind)})"),
     search: str | None = typer.Option(None, "--search", help="Keyword search in title/content"),
     repo: str | None = typer.Option(None, "--repo", help="Repository name (auto-detected)"),
 ) -> None:
     """Look up project knowledge."""
-    if ids:
-        with open_db() as conn:
+    with open_db() as conn:
+        if ids:
             for entry_id in ids:
                 try:
                     entry = get_knowledge(conn, knowledge_id=entry_id)
                 except ValueError as e:
                     _handle_error(e)
-                console.print(f"[bold]#{entry.id}[/bold] \\[{entry.kind}] {entry.title}")
-                console.print(f"  {entry.content}")
-        return
-    resolved_repo = _require_repo(repo)
-    try:
-        with open_db() as conn:
+                _print_knowledge_entry(entry, show_content=True)
+            return
+        resolved_repo = _require_repo(repo)
+        try:
             entries = recall(conn, repo=resolved_repo, kind=kind, search=search)
-    except ValueError as e:
-        _handle_error(e)
+        except ValueError as e:
+            _handle_error(e)
     if not entries:
         console.print("No knowledge entries found.")
         return
     for entry in entries:
-        console.print(f"[bold]#{entry.id}[/bold] \\[{entry.kind}] {entry.title}")
-        if search:
-            console.print(f"  {entry.content}")
+        _print_knowledge_entry(entry, show_content=bool(search))
     if not search:
         console.print(f"\n[dim]Detail: agtrk recall <id> [<id> ...][/dim]")
 
@@ -572,3 +586,48 @@ def update_knowledge_cmd(
         _handle_error(e)
     console.print(f"Updated knowledge entry #{entry.id}: {entry.title}")
 
+
+# --- Feature flag commands ---
+
+feature_app = typer.Typer(help="Manage feature flags.", rich_markup_mode="rich")
+app.add_typer(feature_app, name="feature")
+
+
+@feature_app.command(name="enable")
+def feature_enable_cmd(
+    name: str = typer.Argument(help="Feature name"),
+) -> None:
+    """Enable a feature flag."""
+    try:
+        with open_db() as conn:
+            set_feature(conn, name, enabled=True)
+    except ValueError as e:
+        _handle_error(e)
+    console.print(f"Enabled feature: {name}")
+
+
+@feature_app.command(name="disable")
+def feature_disable_cmd(
+    name: str = typer.Argument(help="Feature name"),
+) -> None:
+    """Disable a feature flag."""
+    try:
+        with open_db() as conn:
+            set_feature(conn, name, enabled=False)
+    except ValueError as e:
+        _handle_error(e)
+    console.print(f"Disabled feature: {name}")
+
+
+@feature_app.command(name="list")
+def feature_list_cmd() -> None:
+    """List all feature flags and their status."""
+    with open_db() as conn:
+        features = list_features(conn)
+    table = Table(show_header=True)
+    table.add_column("Feature", style="bold")
+    table.add_column("Status")
+    for feat, enabled in features:
+        status = "[green]enabled[/green]" if enabled else "[dim]disabled[/dim]"
+        table.add_row(feat.value, status)
+    console.print(table)

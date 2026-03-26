@@ -22,17 +22,28 @@ agtrk install
 ## Commands
 
 ```bash
-agtrk                    # list active sessions
-agtrk show <id>          # session details + notes
-agtrk tui                # terminal dashboard (table + kanban views)
-agtrk list               # list with filters (--archived, --all, --verbose)
-agtrk search <query>     # search sessions by task/note content
-agtrk delete <id>        # delete a session and its notes
-agtrk install            # add hooks to ~/.claude/settings.json
-agtrk uninstall          # remove hooks
-agtrk cleanup            # delete archived sessions older than 30 days
-agtrk --help             # all commands
+agtrk                         # list active sessions
+agtrk show <id>               # session details + notes
+agtrk tui                     # terminal dashboard (table + kanban views)
+agtrk list                    # list with filters (--archived, --all, --verbose)
+agtrk search <query>          # search sessions by task/note content
+agtrk delete <id>             # delete a session and its notes
+agtrk install                 # add hooks to ~/.claude/settings.json
+agtrk uninstall               # remove hooks
+agtrk cleanup                 # delete archived sessions older than 30 days
+agtrk feature list            # show feature flags and their status
+agtrk feature enable <name>   # enable a feature
+agtrk feature disable <name>  # disable a feature
+agtrk --help                  # all commands
 ```
+
+## Feature flags
+
+Some features are gated behind flags and disabled by default. Enable them with `agtrk feature enable <name>`.
+
+| Feature | Description |
+|---------|-------------|
+| `knowledge` | Per-repo project knowledge that agents can store and look up instead of re-exploring the codebase. Adds `learn`, `recall`, `forget`, and `update-knowledge` commands, and teaches the inject prompt to use them. |
 
 ## License
 

@@ -17,6 +17,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Knowledge kinds: architecture, decision, convention, exploration
 - Inject prompt now teaches agents about the knowledge system and encourages proactive use
 - Inject prompt explicitly ties `agtrk learn` to Explore subagent results as a concrete trigger
+- Feature flags system — per-feature opt-in for experimental features
+  - `agtrk feature enable <name>` / `agtrk feature disable <name>` — toggle features
+  - `agtrk feature list` — show all features and their status
+  - Project knowledge inject instructions now gated behind `knowledge` feature flag (disabled by default)
 
 ### Changed
 

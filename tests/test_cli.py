@@ -344,8 +344,20 @@ def test_update_knowledge(tmp_db_env):
     assert "Updated knowledge entry" in result.stdout
 
 
-def test_inject_includes_knowledge_instructions(tmp_db_env):
+def test_inject_excludes_knowledge_when_disabled(tmp_db_env):
+    """Inject output should NOT contain knowledge instructions by default."""
     result = runner.invoke(app, ["inject"])
+    assert result.exit_code == 0
+    assert "agtrk recall" not in result.stdout
+    assert "agtrk learn" not in result.stdout
+    assert "Knowledge kinds" not in result.stdout
+
+
+def test_inject_includes_knowledge_when_enabled(tmp_db_env):
+    """Inject output should contain knowledge instructions when feature is enabled."""
+    runner.invoke(app, ["feature", "enable", "knowledge"])
+    result = runner.invoke(app, ["inject"])
+    assert result.exit_code == 0
     assert "agtrk recall" in result.stdout
     assert "agtrk learn" in result.stdout
     assert "Knowledge kinds" in result.stdout
@@ -359,3 +371,42 @@ def test_uninstall_idempotent(tmp_db_env, tmp_path):
 
     result = runner.invoke(app, ["uninstall", "--settings", str(settings_path)])
     assert result.exit_code == 0
+
+
+def test_feature_enable(tmp_db_env):
+    result = runner.invoke(app, ["feature", "enable", "knowledge"])
+    assert result.exit_code == 0
+    assert "Enabled feature: knowledge" in result.stdout
+
+
+def test_feature_disable(tmp_db_env):
+    runner.invoke(app, ["feature", "enable", "knowledge"])
+    result = runner.invoke(app, ["feature", "disable", "knowledge"])
+    assert result.exit_code == 0
+    assert "Disabled feature: knowledge" in result.stdout
+
+
+def test_feature_enable_invalid(tmp_db_env):
+    result = runner.invoke(app, ["feature", "enable", "garbage"])
+    assert result.exit_code != 0
+    assert "Invalid feature" in result.stdout
+
+
+def test_feature_disable_invalid(tmp_db_env):
+    result = runner.invoke(app, ["feature", "disable", "garbage"])
+    assert result.exit_code != 0
+    assert "Invalid feature" in result.stdout
+
+
+def test_feature_list(tmp_db_env):
+    result = runner.invoke(app, ["feature", "list"])
+    assert result.exit_code == 0
+    assert "knowledge" in result.stdout
+    assert "disabled" in result.stdout.lower()
+
+
+def test_feature_list_shows_enabled(tmp_db_env):
+    runner.invoke(app, ["feature", "enable", "knowledge"])
+    result = runner.invoke(app, ["feature", "list"])
+    assert result.exit_code == 0
+    assert "enabled" in result.stdout.lower()

@@ -2,7 +2,7 @@
 
 import pytest
 
-from agtrk.models import Kind, Session, Status
+from agtrk.models import Feature, Kind, Session, Status
 from agtrk.service import (
     SessionWithNotes,
     cleanup,
@@ -10,12 +10,15 @@ from agtrk.service import (
     forget,
     get_session,
     heartbeat,
+    is_feature_enabled,
     learn,
+    list_features,
     list_sessions,
     recall,
     register_session,
     reopen_session,
     search_sessions,
+    set_feature,
     update_knowledge,
     update_session,
 )
@@ -604,3 +607,55 @@ class TestNoteAutoDetection:
         assert note.cwd is not None
         assert note.worktree is None
 
+
+class TestFeatureFlags:
+    def test_feature_table_exists(self, db):
+        """Migration creates the feature table."""
+        row = db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='feature'"
+        ).fetchone()
+        assert row is not None
+
+    def test_set_feature_enable(self, db):
+        """set_feature enables a feature."""
+        set_feature(db, "knowledge", enabled=True)
+        row = db.execute("SELECT enabled FROM feature WHERE name = 'knowledge'").fetchone()
+        assert row["enabled"] == 1
+
+    def test_set_feature_disable(self, db):
+        """set_feature disables a previously enabled feature."""
+        set_feature(db, "knowledge", enabled=True)
+        set_feature(db, "knowledge", enabled=False)
+        row = db.execute("SELECT enabled FROM feature WHERE name = 'knowledge'").fetchone()
+        assert row["enabled"] == 0
+
+    def test_set_feature_invalid_name(self, db):
+        """set_feature rejects invalid feature names."""
+        with pytest.raises(ValueError, match="Invalid feature"):
+            set_feature(db, "garbage", enabled=True)
+
+    def test_is_feature_enabled_default(self, db):
+        """is_feature_enabled returns False when no row exists."""
+        assert is_feature_enabled(db, "knowledge") is False
+
+    def test_is_feature_enabled_after_enable(self, db):
+        """is_feature_enabled returns True after enabling."""
+        set_feature(db, "knowledge", enabled=True)
+        assert is_feature_enabled(db, "knowledge") is True
+
+    def test_is_feature_enabled_invalid_name(self, db):
+        """is_feature_enabled rejects invalid feature names."""
+        with pytest.raises(ValueError, match="Invalid feature"):
+            is_feature_enabled(db, "garbage")
+
+    def test_list_features_defaults(self, db):
+        """list_features returns all enum members, defaulting to disabled."""
+        result = list_features(db)
+        assert len(result) == len(Feature)
+        assert result[0] == (Feature.knowledge, False)
+
+    def test_list_features_with_enabled(self, db):
+        """list_features reflects enabled state."""
+        set_feature(db, "knowledge", enabled=True)
+        result = list_features(db)
+        assert result[0] == (Feature.knowledge, True)
