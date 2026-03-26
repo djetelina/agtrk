@@ -57,7 +57,7 @@ line-length = 144
 select = ["E", "I", "ASYNC", "B", "A", "PIE", "PT", "SIM", "PTH", "N", "W", "PL", "UP", "RUF"]
 
 [tool.ruff.lint.per-file-ignores]
-"src/agtrk/cli.py" = ["A002", "PLC0415", "PLR0913"]
+"src/agtrk/cli.py" = ["A002", "B008", "PLC0415", "PLR0913"]
 "src/agtrk/service.py" = ["PLR0913"]
 "src/agtrk/models.py" = ["PLC0415"]
 "src/agtrk/tui.py" = ["RUF012", "PLR2004"]
