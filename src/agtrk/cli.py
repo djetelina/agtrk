@@ -357,6 +357,9 @@ def inject() -> None:
         instructions += INJECT_INSTRUCTIONS_KNOWLEDGE
     hook_console.print(instructions)
 
+    active_statuses = {Status.implementing, Status.planning}
+    active_in_repo = [s for s in scoped_sessions if s.status in active_statuses and s.repo is not None]
+
     hook_console.print()
     if scoped_sessions:
         hook_console.print("SESSION TRACKER — active work:")
@@ -367,6 +370,8 @@ def inject() -> None:
         hook_console.print("SESSION TRACKER — no active sessions.")
         if other_count > 0:
             hook_console.print(f"(+{other_count} session(s) in other repos)")
+    if active_in_repo:
+        hook_console.print(f"\nWARNING: {len(active_in_repo)} active session(s) in this repo. Use a worktree to avoid conflicts.")
     typer.echo(buf.getvalue(), nl=False)
 
 

@@ -13,6 +13,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Inject session list is now repo-scoped — auto-detects current repo and shows only matching sessions (plus sessions with no repo); other-repo sessions collapsed to a count
 - `update`, `complete`, and `reopen` commands no longer print confirmation messages — saves tokens in agent conversations
 
+### Added
+
+- Multi-agent conflict warning — inject output warns when there are active (implementing/planning) sessions in the same repo, nudging the agent to use a worktree
+
 ## [1.2.0] - 2026-03-26
 
 ### Added
