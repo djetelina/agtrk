@@ -397,6 +397,7 @@ def list_sessions(
     conn: sqlite3.Connection,
     include_archived: bool = False,
     archived_only: bool = False,
+    repo: str | None = None,
 ) -> list[Session]:
     """Return a list of sessions ordered by updated_at descending.
 
@@ -404,18 +405,29 @@ def list_sessions(
         conn: Open database connection.
         include_archived: When True, return all sessions regardless of completion.
         archived_only: When True, return only completed sessions.
+        repo: When set, return only sessions matching this repo or with no repo.
 
     Returns:
         A list of :class:`~agtrk.models.Session` objects.
     """
-    if archived_only:
-        where = "WHERE completed_at IS NOT NULL"
-    elif include_archived:
-        where = ""
-    else:
-        where = "WHERE completed_at IS NULL"
+    conditions: list[str] = []
+    params: list[object] = []
 
-    rows = conn.execute(f"SELECT {_SESSION_COLUMNS} FROM session {where} ORDER BY updated_at DESC").fetchall()
+    if archived_only:
+        conditions.append("completed_at IS NOT NULL")
+    elif not include_archived:
+        conditions.append("completed_at IS NULL")
+
+    if repo is not None:
+        conditions.append("(repo = ? OR repo IS NULL)")
+        params.append(repo)
+
+    where = f"WHERE {' AND '.join(conditions)}" if conditions else ""
+
+    rows = conn.execute(
+        f"SELECT {_SESSION_COLUMNS} FROM session {where} ORDER BY updated_at DESC",
+        params,
+    ).fetchall()
 
     return [_row_to_session(row) for row in rows]
 

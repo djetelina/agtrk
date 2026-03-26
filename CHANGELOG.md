@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - Inject session table now uses plain text (`id | status | task`) instead of Rich box-drawing characters — saves tokens when consumed by agents
+- Inject session list is now repo-scoped — auto-detects current repo and shows only matching sessions (plus sessions with no repo); other-repo sessions collapsed to a count
 
 ## [1.2.0] - 2026-03-26
 

@@ -343,9 +343,14 @@ def inject() -> None:
     buf = io.StringIO()
     hook_console = Console(file=buf, force_terminal=False, highlight=False)
 
+    repo = detect_repo()
+
     with open_db() as conn:
-        sessions = list_sessions(conn, include_archived=False)
+        all_sessions = list_sessions(conn, include_archived=False)
+        scoped_sessions = list_sessions(conn, include_archived=False, repo=repo) if repo else all_sessions
         knowledge_enabled = is_feature_enabled(conn, Feature.knowledge)
+
+    other_count = len(all_sessions) - len(scoped_sessions)
 
     instructions = INJECT_INSTRUCTIONS_BASE
     if knowledge_enabled:
@@ -353,11 +358,15 @@ def inject() -> None:
     hook_console.print(instructions)
 
     hook_console.print()
-    if sessions:
+    if scoped_sessions:
         hook_console.print("SESSION TRACKER — active work:")
-        hook_console.print(_build_inject_session_list(sessions))
+        hook_console.print(_build_inject_session_list(scoped_sessions))
+        if other_count > 0:
+            hook_console.print(f"(+{other_count} session(s) in other repos)")
     else:
         hook_console.print("SESSION TRACKER — no active sessions.")
+        if other_count > 0:
+            hook_console.print(f"(+{other_count} session(s) in other repos)")
     typer.echo(buf.getvalue(), nl=False)
 
 
