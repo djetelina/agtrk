@@ -7,8 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Project knowledge system — per-repo knowledge entries that agents can look up instead of re-exploring
+  - `agtrk learn --kind <kind> --title "..." "content"` — store knowledge
+  - `agtrk recall --search <topic> --kind <kind>` — look up knowledge
+  - `agtrk forget <id>` — delete a knowledge entry
+  - `agtrk update-knowledge <id>` — update an existing entry
+  - Knowledge kinds: architecture, decision, convention, exploration
+- Inject prompt now teaches agents about the knowledge system and encourages proactive use
+- Inject prompt explicitly ties `agtrk learn` to Explore subagent results as a concrete trigger
+
 ### Changed
 
+- `register --status todo` no longer auto-detects repo from git origin (todos are often cross-repo observations; use `--repo` to set explicitly)
 - Minimum Python version raised from 3.10 to 3.11 (StrEnum requires 3.11+)
 
 ## [1.0.0] - 2026-03-24

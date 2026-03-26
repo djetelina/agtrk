@@ -14,6 +14,25 @@ class Status(StrEnum):
     done = "done"
 
 
+class Kind(StrEnum):
+    architecture = "architecture"
+    decision = "decision"
+    convention = "convention"
+    exploration = "exploration"
+
+    @property
+    def description(self) -> str:
+        return _KIND_DESCRIPTIONS[self]
+
+
+_KIND_DESCRIPTIONS: dict[Kind, str] = {
+    Kind.architecture: "structural facts (where things live, how components connect)",
+    Kind.decision: "why something was chosen over alternatives",
+    Kind.convention: "patterns, coding standards, tooling choices",
+    Kind.exploration: "other discovered facts worth preserving",
+}
+
+
 @dataclass
 class Session:
     id: str
@@ -37,6 +56,17 @@ class Note:
     branch: str | None = None
     cwd: str | None = None
     worktree: bool | None = None
+
+
+@dataclass
+class Knowledge:
+    id: int
+    repo: str
+    kind: Kind
+    title: str
+    content: str
+    created_at: datetime
+    updated_at: datetime
 
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")

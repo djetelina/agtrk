@@ -11,17 +11,22 @@ from rich.table import Table
 
 from agtrk.db import open_db
 from agtrk.git import detect_repo, repo_display_name
-from agtrk.models import Status
+from agtrk.models import Kind, Status
 from agtrk.service import (
     cleanup,
     complete_session,
     delete_session,
+    forget,
+    get_knowledge,
     get_session,
     heartbeat,
+    learn,
     list_sessions,
+    recall,
     register_session,
     reopen_session,
     search_sessions,
+    update_knowledge,
     update_session,
 )
 
@@ -36,6 +41,15 @@ console = Console()
 def _handle_error(e: ValueError) -> NoReturn:
     console.print(f"[red]Error:[/red] {e}")
     raise typer.Exit(1)
+
+
+def _require_repo(repo: str | None) -> str:
+    """Resolve repo, raising Exit(1) if undetectable."""
+    resolved = repo if repo is not None else detect_repo()
+    if resolved is None:
+        console.print("[red]Error:[/red] Could not detect repo from git remote. Use --repo org/name (e.g. --repo acme/widgets).")
+        raise typer.Exit(1)
+    return resolved
 
 
 def _version_callback(value: bool) -> None:
@@ -268,9 +282,32 @@ Search:
 - `agtrk search <query> --all` to include archived sessions
 
 Backlog:
-- `agtrk register --task "..." --status todo` for work you notice but shouldn't act on now""".format(
+- `agtrk register --task "..." --status todo` for work you notice but shouldn't act on now
+
+Project knowledge (auto-scoped to current repo — NOT the same as auto-memory; \
+auto-memory rules about "don't save project structure" do NOT apply here):
+- When you need codebase context, `agtrk recall --search <topic>` FIRST. \
+If it returns results and you are not about to edit code, you have enough context — move on. \
+Only read files when recall returns nothing or you need line-level detail for edits.
+- List all entries for this repo: `agtrk recall`
+- After learning stable project facts, you MUST save them via \
+`agtrk learn --kind <kind> --title "..." "..."` BEFORE responding to the user. \
+This especially applies when Explore subagents return results — review their findings \
+for stable, reusable facts and save each one. Treat this like the register/cron gate.
+- Keep entries focused — one topic per entry so search stays useful.
+  Bad:  "Project uses Typer, tests in tests/, DB uses WAL mode, service layer owns SQL"
+  Good: 4 separate entries — "CLI framework: Typer + Rich", "test structure", \
+  "DB conventions: WAL + migrations", "service layer pattern".
+- If you discover a knowledge entry is outdated, update it immediately:
+  `agtrk update-knowledge <id> "corrected content"`
+- If an entry is no longer relevant, remove it: `agtrk forget <id>`
+
+
+Knowledge kinds:
+  {kinds}""".format(
     cron_prompt=INJECT_CRON_PROMPT,
     statuses="|".join(s.value for s in Status if s != Status.done),
+    kinds="\n  ".join(f"{k.value:14s} — {k.description}" for k in Kind),
 )
 
 
@@ -384,7 +421,7 @@ def register(
     note: str | None = typer.Option(None, "--note", help="Initial note"),
 ) -> None:
     """Register a new session."""
-    resolved_repo = repo if repo is not None else detect_repo()
+    resolved_repo = repo if repo is not None else (None if status == "todo" else detect_repo())
     try:
         with open_db() as conn:
             session = register_session(conn, task=task, slug_id=id, repo=resolved_repo, status=status, issue=issue, note=note)
@@ -450,3 +487,88 @@ def reopen(
     except ValueError as e:
         _handle_error(e)
     console.print(f"Reopened session: {id}")
+
+
+# --- Knowledge commands ---
+
+
+@app.command(name="learn", rich_help_panel="Agent commands")
+def learn_cmd(
+    content: str = typer.Argument(help="Knowledge content"),
+    kind: str = typer.Option(..., "--kind", help="Knowledge kind (architecture, decision, convention, exploration)"),
+    title: str = typer.Option(..., "--title", help="Short searchable title"),
+    repo: str | None = typer.Option(None, "--repo", help="Repository name (auto-detected)"),
+) -> None:
+    """Store a project knowledge entry."""
+    resolved_repo = _require_repo(repo)
+    try:
+        with open_db() as conn:
+            entry = learn(conn, repo=resolved_repo, kind=kind, title=title, content=content)
+    except ValueError as e:
+        _handle_error(e)
+    console.print(f"Learned #{entry.id}: {entry.title}")
+
+
+@app.command(name="recall", rich_help_panel="Agent commands")
+def recall_cmd(
+    ids: list[int] = typer.Argument(None, help="Knowledge entry IDs (shows full detail)"),
+    kind: str | None = typer.Option(None, "--kind", help="Filter by kind"),
+    search: str | None = typer.Option(None, "--search", help="Keyword search in title/content"),
+    repo: str | None = typer.Option(None, "--repo", help="Repository name (auto-detected)"),
+) -> None:
+    """Look up project knowledge."""
+    if ids:
+        with open_db() as conn:
+            for entry_id in ids:
+                try:
+                    entry = get_knowledge(conn, knowledge_id=entry_id)
+                except ValueError as e:
+                    _handle_error(e)
+                console.print(f"[bold]#{entry.id}[/bold] \\[{entry.kind}] {entry.title}")
+                console.print(f"  {entry.content}")
+        return
+    resolved_repo = _require_repo(repo)
+    try:
+        with open_db() as conn:
+            entries = recall(conn, repo=resolved_repo, kind=kind, search=search)
+    except ValueError as e:
+        _handle_error(e)
+    if not entries:
+        console.print("No knowledge entries found.")
+        return
+    for entry in entries:
+        console.print(f"[bold]#{entry.id}[/bold] \\[{entry.kind}] {entry.title}")
+        if search:
+            console.print(f"  {entry.content}")
+    if not search:
+        console.print(f"\n[dim]Detail: agtrk recall <id> [<id> ...][/dim]")
+
+
+@app.command(name="forget", rich_help_panel="Agent commands")
+def forget_cmd(
+    id: int = typer.Argument(help="Knowledge entry ID"),
+) -> None:
+    """Delete a knowledge entry."""
+    try:
+        with open_db() as conn:
+            forget(conn, knowledge_id=id)
+    except ValueError as e:
+        _handle_error(e)
+    console.print(f"Forgot knowledge entry #{id}")
+
+
+@app.command(name="update-knowledge", rich_help_panel="Agent commands")
+def update_knowledge_cmd(
+    id: int = typer.Argument(help="Knowledge entry ID"),
+    content: str | None = typer.Argument(None, help="New content"),
+    title: str | None = typer.Option(None, "--title", help="New title"),
+    kind: str | None = typer.Option(None, "--kind", help="New kind"),
+) -> None:
+    """Update a knowledge entry."""
+    try:
+        with open_db() as conn:
+            entry = update_knowledge(conn, knowledge_id=id, title=title, content=content, kind=kind)
+    except ValueError as e:
+        _handle_error(e)
+    console.print(f"Updated knowledge entry #{entry.id}: {entry.title}")
+

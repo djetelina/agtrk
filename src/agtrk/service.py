@@ -8,9 +8,10 @@ obtaining the connection (e.g. via get_db()).
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from enum import StrEnum
 
 from agtrk.git import detect_branch, detect_cwd, detect_repo, detect_worktree
-from agtrk.models import Note, Session, Status, generate_slug
+from agtrk.models import Kind, Knowledge, Note, Session, Status, generate_slug
 
 _SESSION_COLUMNS = "id, task, repo, status, issue, created_at, updated_at, completed_at, summary"
 
@@ -27,13 +28,14 @@ class SessionWithNotes:
         return getattr(self.session, name)
 
 
-def _validate_status(status: str) -> Status:
-    """Validate a status string against the Status enum."""
+def _validate_enum(value: str, enum_cls: type[StrEnum]) -> StrEnum:
+    """Validate a string against a StrEnum and return the member."""
     try:
-        return Status(status)
+        return enum_cls(value)
     except ValueError:
-        valid = ", ".join(s.value for s in Status)
-        raise ValueError(f"Invalid status '{status}'. Must be one of: {valid}") from None
+        label = enum_cls.__name__.lower()
+        valid = ", ".join(m.value for m in enum_cls)
+        raise ValueError(f"Invalid {label} '{value}'. Must be one of: {valid}") from None
 
 
 # ---------------------------------------------------------------------------
@@ -163,7 +165,7 @@ def register_session(
     Returns:
         The newly created :class:`~agtrk.models.Session`.
     """
-    _validate_status(status)
+    _validate_enum(status, Status)
 
     rows = conn.execute("SELECT id FROM session").fetchall()
     existing_slugs: set[str] = {row["id"] for row in rows}
@@ -258,7 +260,7 @@ def update_session(
         The updated :class:`~agtrk.models.Session`.
     """
     if status is not None:
-        _validate_status(status)
+        _validate_enum(status, Status)
 
     session_id = _resolve_session_id(conn, id_or_prefix)
     now = datetime.now().isoformat()
@@ -367,7 +369,7 @@ def reopen_session(
     Returns:
         The updated :class:`~agtrk.models.Session`.
     """
-    _validate_status(status)
+    _validate_enum(status, Status)
 
     session_id = _resolve_session_id(conn, id_or_prefix)
     now = datetime.now().isoformat()
@@ -497,6 +499,230 @@ def search_sessions(
         )
 
     return results
+
+
+def _row_to_knowledge(row: sqlite3.Row) -> Knowledge:
+    """Convert a sqlite3.Row from the knowledge table to a Knowledge dataclass."""
+    return Knowledge(
+        id=row["id"],
+        repo=row["repo"],
+        kind=Kind(row["kind"]),
+        title=row["title"],
+        content=row["content"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(row["updated_at"]),
+    )
+
+
+_KNOWLEDGE_COLUMNS = "id, repo, kind, title, content, created_at, updated_at"
+
+
+# ---------------------------------------------------------------------------
+# learn
+# ---------------------------------------------------------------------------
+
+
+def learn(
+    conn: sqlite3.Connection,
+    repo: str,
+    kind: str,
+    title: str,
+    content: str,
+) -> Knowledge:
+    """Store a project knowledge entry.
+
+    Args:
+        conn: Open database connection.
+        repo: Repository identifier.
+        kind: Knowledge category (architecture, decision, convention, exploration).
+        title: Short searchable summary.
+        content: The knowledge entry body.
+
+    Returns:
+        The newly created :class:`~agtrk.models.Knowledge`.
+    """
+    validated_kind = _validate_enum(kind, Kind)
+    now = datetime.now().isoformat()
+
+    cursor = conn.execute(
+        "INSERT INTO knowledge (repo, kind, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+        (repo, validated_kind.value, title, content, now, now),
+    )
+    conn.commit()
+
+    return Knowledge(
+        id=cursor.lastrowid,
+        repo=repo,
+        kind=validated_kind,
+        title=title,
+        content=content,
+        created_at=datetime.fromisoformat(now),
+        updated_at=datetime.fromisoformat(now),
+    )
+
+
+# ---------------------------------------------------------------------------
+# recall
+# ---------------------------------------------------------------------------
+
+
+def recall(
+    conn: sqlite3.Connection,
+    repo: str,
+    kind: str | None = None,
+    search: str | None = None,
+) -> list[Knowledge]:
+    """Look up project knowledge entries.
+
+    Args:
+        conn: Open database connection.
+        repo: Repository identifier.
+        kind: Optional filter by knowledge category.
+        search: Optional keyword to match in title or content.
+
+    Returns:
+        A list of matching :class:`~agtrk.models.Knowledge` entries.
+    """
+    conditions = ["repo = ?"]
+    params: list[object] = [repo]
+
+    if kind is not None:
+        _validate_enum(kind, Kind)
+        conditions.append("kind = ?")
+        params.append(kind)
+
+    if search is not None:
+        escaped = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        like_pattern = f"%{escaped}%"
+        conditions.append("(title LIKE ? ESCAPE '\\' COLLATE NOCASE OR content LIKE ? ESCAPE '\\' COLLATE NOCASE)")
+        params.extend([like_pattern, like_pattern])
+
+    where = " AND ".join(conditions)
+    rows = conn.execute(
+        f"SELECT {_KNOWLEDGE_COLUMNS} FROM knowledge WHERE {where} ORDER BY updated_at DESC",
+        params,
+    ).fetchall()
+
+    return [_row_to_knowledge(row) for row in rows]
+
+
+# ---------------------------------------------------------------------------
+# get_knowledge
+# ---------------------------------------------------------------------------
+
+
+def get_knowledge(conn: sqlite3.Connection, knowledge_id: int) -> Knowledge:
+    """Fetch a single knowledge entry by ID.
+
+    Args:
+        conn: Open database connection.
+        knowledge_id: The ID of the knowledge entry.
+
+    Returns:
+        The :class:`~agtrk.models.Knowledge` entry.
+
+    Raises:
+        ValueError: If the entry does not exist.
+    """
+    row = conn.execute(
+        f"SELECT {_KNOWLEDGE_COLUMNS} FROM knowledge WHERE id = ?",
+        (knowledge_id,),
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"No knowledge entry found with id {knowledge_id}")
+    return _row_to_knowledge(row)
+
+
+# ---------------------------------------------------------------------------
+# forget
+# ---------------------------------------------------------------------------
+
+
+def forget(conn: sqlite3.Connection, knowledge_id: int) -> int:
+    """Delete a knowledge entry.
+
+    Args:
+        conn: Open database connection.
+        knowledge_id: The ID of the knowledge entry to delete.
+
+    Returns:
+        The ID of the deleted entry.
+
+    Raises:
+        ValueError: If the entry does not exist.
+    """
+    cursor = conn.execute("DELETE FROM knowledge WHERE id = ?", (knowledge_id,))
+    conn.commit()
+    if cursor.rowcount == 0:
+        raise ValueError(f"No knowledge entry found with id {knowledge_id}")
+    return knowledge_id
+
+
+# ---------------------------------------------------------------------------
+# update_knowledge
+# ---------------------------------------------------------------------------
+
+
+def update_knowledge(
+    conn: sqlite3.Connection,
+    knowledge_id: int,
+    title: str | None = None,
+    content: str | None = None,
+    kind: str | None = None,
+) -> Knowledge:
+    """Update a knowledge entry.
+
+    Args:
+        conn: Open database connection.
+        knowledge_id: The ID of the knowledge entry to update.
+        title: New title (optional).
+        content: New content (optional).
+        kind: New kind (optional).
+
+    Returns:
+        The updated :class:`~agtrk.models.Knowledge`.
+
+    Raises:
+        ValueError: If the entry does not exist or kind is invalid.
+    """
+    row = conn.execute(f"SELECT {_KNOWLEDGE_COLUMNS} FROM knowledge WHERE id = ?", (knowledge_id,)).fetchone()
+    if row is None:
+        raise ValueError(f"No knowledge entry found with id {knowledge_id}")
+
+    if title is None and content is None and kind is None:
+        raise ValueError("Nothing to update — provide at least one of: content, --title, --kind")
+
+    if kind is not None:
+        _validate_enum(kind, Kind)
+
+    now = datetime.now().isoformat()
+    fields: dict[str, object] = {"updated_at": now}
+    if title is not None:
+        fields["title"] = title
+    if content is not None:
+        fields["content"] = content
+    if kind is not None:
+        fields["kind"] = kind
+
+    set_clause = ", ".join(f"{col} = ?" for col in fields)
+    values = [*fields.values(), knowledge_id]
+    conn.execute(f"UPDATE knowledge SET {set_clause} WHERE id = ?", values)
+    conn.commit()
+
+    return Knowledge(
+        id=knowledge_id,
+        repo=row["repo"],
+        kind=Kind(kind if kind is not None else row["kind"]),
+        title=title if title is not None else row["title"],
+        content=content if content is not None else row["content"],
+        created_at=datetime.fromisoformat(row["created_at"]),
+        updated_at=datetime.fromisoformat(now),
+    )
+
+
+# ---------------------------------------------------------------------------
+# delete_session
+# ---------------------------------------------------------------------------
 
 
 def delete_session(conn: sqlite3.Connection, id_or_prefix: str) -> str:

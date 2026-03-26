@@ -22,15 +22,16 @@ agtrk install
 ## Commands
 
 ```bash
-agtrk                # list active sessions
-agtrk show <id>      # session details + notes
-agtrk tui            # terminal dashboard (table + kanban views)
-agtrk list           # list with filters (--archived, --all, --verbose)
-agtrk delete <id>    # delete a session and its notes
-agtrk install        # add hooks to ~/.claude/settings.json
-agtrk uninstall      # remove hooks
-agtrk cleanup        # delete archived sessions older than 30 days
-agtrk --help         # all commands
+agtrk                    # list active sessions
+agtrk show <id>          # session details + notes
+agtrk tui                # terminal dashboard (table + kanban views)
+agtrk list               # list with filters (--archived, --all, --verbose)
+agtrk search <query>     # search sessions by task/note content
+agtrk delete <id>        # delete a session and its notes
+agtrk install            # add hooks to ~/.claude/settings.json
+agtrk uninstall          # remove hooks
+agtrk cleanup            # delete archived sessions older than 30 days
+agtrk --help             # all commands
 ```
 
 ## License
