@@ -39,7 +39,7 @@ def _validate_enum(value: str, enum_cls: type[StrEnum]) -> StrEnum:
 
 
 def _like_pattern(term: str) -> str:
-    """Escape SQL LIKE special chars and wrap in %...%."""
+    """Escape SQL LIKE special chars and wrap in %...%. Use with ESCAPE '\\\\'."""
     escaped = term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
     return f"%{escaped}%"
 

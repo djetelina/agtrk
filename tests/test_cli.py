@@ -321,6 +321,15 @@ def test_recall_with_kind_filter(tmp_db_env):
     assert "API layer" not in result.stdout
 
 
+def test_recall_by_id(tmp_db_env):
+    reg = runner.invoke(app, ["learn", "--kind", "architecture", "--title", "API layer", "--repo", "acme/widgets", "REST API in src/api/"])
+    entry_id = reg.stdout.split("#")[1].split(":")[0]
+    result = runner.invoke(app, ["recall", entry_id])
+    assert result.exit_code == 0
+    assert "API layer" in result.stdout
+    assert "REST API in src/api/" in result.stdout
+
+
 def test_forget(tmp_db_env):
     reg = runner.invoke(app, ["learn", "--kind", "architecture", "--title", "API layer", "--repo", "acme/widgets", "REST"])
     # Extract the ID from "Learned #1: API layer"
