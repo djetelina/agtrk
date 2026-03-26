@@ -56,6 +56,23 @@ MIGRATIONS: list[list[str]] = [
     [
         "ALTER TABLE session ADD COLUMN summary TEXT",
     ],
+    # Migration 5 — knowledge table
+    [
+        """
+        CREATE TABLE IF NOT EXISTS knowledge (
+            id         INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo       TEXT    NOT NULL,
+            kind       TEXT    NOT NULL,
+            title      TEXT    NOT NULL,
+            content    TEXT    NOT NULL,
+            created_at TEXT    NOT NULL,
+            updated_at TEXT    NOT NULL
+        )
+        """,
+        """
+        CREATE INDEX IF NOT EXISTS idx_knowledge_repo ON knowledge (repo)
+        """,
+    ],
 ]
 
 DB_SCHEMA_VERSION: int = len(MIGRATIONS)

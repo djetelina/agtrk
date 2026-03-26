@@ -2,17 +2,21 @@
 
 import pytest
 
-from agtrk.models import Session, Status
+from agtrk.models import Kind, Session, Status
 from agtrk.service import (
     SessionWithNotes,
     cleanup,
     complete_session,
+    forget,
     get_session,
     heartbeat,
+    learn,
     list_sessions,
+    recall,
     register_session,
     reopen_session,
     search_sessions,
+    update_knowledge,
     update_session,
 )
 
@@ -419,6 +423,147 @@ class TestSearchSessions:
         assert len(results) == 2
 
 
+class TestLearn:
+    def test_creates_knowledge_entry(self, db):
+        """learn creates a knowledge entry with correct fields."""
+        entry = learn(db, repo="acme/widgets", kind="architecture", title="API layer", content="REST API in src/api/")
+        assert entry.id is not None
+        assert entry.repo == "acme/widgets"
+        assert entry.kind == Kind.architecture
+        assert entry.title == "API layer"
+        assert entry.content == "REST API in src/api/"
+
+    def test_invalid_kind_raises(self, db):
+        """learn rejects invalid kind strings."""
+        with pytest.raises(ValueError, match="Invalid kind"):
+            learn(db, repo="acme/widgets", kind="garbage", title="Bad", content="bad")
+
+    def test_persists_to_db(self, db):
+        """Knowledge entry is queryable from the database."""
+        entry = learn(db, repo="acme/widgets", kind="decision", title="ORM choice", content="SQLAlchemy over raw SQL")
+        row = db.execute("SELECT * FROM knowledge WHERE id = ?", (entry.id,)).fetchone()
+        assert row is not None
+        assert row["title"] == "ORM choice"
+
+
+class TestRecall:
+    def test_recall_by_repo(self, db):
+        """recall returns entries for the specified repo."""
+        learn(db, repo="acme/widgets", kind="architecture", title="API", content="REST")
+        learn(db, repo="other/repo", kind="architecture", title="API", content="GraphQL")
+        results = recall(db, repo="acme/widgets")
+        assert len(results) == 1
+        assert results[0].repo == "acme/widgets"
+
+    def test_recall_filter_by_kind(self, db):
+        """recall with kind= returns only matching kind."""
+        learn(db, repo="acme/widgets", kind="architecture", title="API", content="REST")
+        learn(db, repo="acme/widgets", kind="decision", title="ORM", content="SQLAlchemy")
+        results = recall(db, repo="acme/widgets", kind="architecture")
+        assert len(results) == 1
+        assert results[0].kind == Kind.architecture
+
+    def test_recall_search_title(self, db):
+        """recall with search= matches title."""
+        learn(db, repo="acme/widgets", kind="architecture", title="Auth middleware", content="JWT based")
+        learn(db, repo="acme/widgets", kind="architecture", title="Database", content="PostgreSQL")
+        results = recall(db, repo="acme/widgets", search="auth")
+        assert len(results) == 1
+        assert results[0].title == "Auth middleware"
+
+    def test_recall_search_content(self, db):
+        """recall with search= matches content."""
+        learn(db, repo="acme/widgets", kind="convention", title="Testing", content="pytest with fixtures")
+        results = recall(db, repo="acme/widgets", search="fixtures")
+        assert len(results) == 1
+
+    def test_recall_search_case_insensitive(self, db):
+        """recall search is case-insensitive."""
+        learn(db, repo="acme/widgets", kind="architecture", title="API Layer", content="REST")
+        results = recall(db, repo="acme/widgets", search="api layer")
+        assert len(results) == 1
+
+    def test_recall_combined_filters(self, db):
+        """recall with kind= and search= applies both filters."""
+        learn(db, repo="acme/widgets", kind="architecture", title="Auth", content="JWT")
+        learn(db, repo="acme/widgets", kind="decision", title="Auth choice", content="JWT over sessions")
+        results = recall(db, repo="acme/widgets", kind="decision", search="auth")
+        assert len(results) == 1
+        assert results[0].kind == Kind.decision
+
+    def test_recall_empty(self, db):
+        """recall returns empty list when no entries match."""
+        results = recall(db, repo="acme/widgets")
+        assert results == []
+
+    def test_recall_invalid_kind_raises(self, db):
+        """recall with invalid kind raises ValueError."""
+        with pytest.raises(ValueError, match="Invalid kind"):
+            recall(db, repo="acme/widgets", kind="garbage")
+
+
+class TestForget:
+    def test_forget_deletes_entry(self, db):
+        """forget removes the knowledge entry."""
+        entry = learn(db, repo="acme/widgets", kind="architecture", title="API", content="REST")
+        forget(db, knowledge_id=entry.id)
+        row = db.execute("SELECT id FROM knowledge WHERE id = ?", (entry.id,)).fetchone()
+        assert row is None
+
+    def test_forget_nonexistent_raises(self, db):
+        """forget raises ValueError for non-existent ID."""
+        with pytest.raises(ValueError, match="No knowledge entry found"):
+            forget(db, knowledge_id=9999)
+
+
+class TestUpdateKnowledge:
+    def test_update_content(self, db):
+        """update_knowledge changes content."""
+        entry = learn(db, repo="acme/widgets", kind="architecture", title="API", content="REST")
+        updated = update_knowledge(db, knowledge_id=entry.id, content="GraphQL")
+        assert updated.content == "GraphQL"
+        assert updated.title == "API"
+
+    def test_update_title(self, db):
+        """update_knowledge changes title."""
+        entry = learn(db, repo="acme/widgets", kind="architecture", title="Old title", content="content")
+        updated = update_knowledge(db, knowledge_id=entry.id, title="New title")
+        assert updated.title == "New title"
+
+    def test_update_kind(self, db):
+        """update_knowledge changes kind."""
+        entry = learn(db, repo="acme/widgets", kind="architecture", title="API", content="REST")
+        updated = update_knowledge(db, knowledge_id=entry.id, kind="decision")
+        assert updated.kind == Kind.decision
+
+    def test_update_bumps_timestamp(self, db):
+        """update_knowledge bumps updated_at."""
+        import time
+
+        entry = learn(db, repo="acme/widgets", kind="architecture", title="API", content="REST")
+        before = entry.updated_at
+        time.sleep(0.01)
+        updated = update_knowledge(db, knowledge_id=entry.id, content="GraphQL")
+        assert updated.updated_at >= before
+
+    def test_update_nonexistent_raises(self, db):
+        """update_knowledge raises ValueError for non-existent ID."""
+        with pytest.raises(ValueError, match="No knowledge entry found"):
+            update_knowledge(db, knowledge_id=9999, content="nope")
+
+    def test_update_invalid_kind_raises(self, db):
+        """update_knowledge with invalid kind raises ValueError."""
+        entry = learn(db, repo="acme/widgets", kind="architecture", title="API", content="REST")
+        with pytest.raises(ValueError, match="Invalid kind"):
+            update_knowledge(db, knowledge_id=entry.id, kind="garbage")
+
+    def test_update_no_fields_raises(self, db):
+        """update_knowledge with no fields to update raises ValueError."""
+        entry = learn(db, repo="acme/widgets", kind="architecture", title="API", content="REST")
+        with pytest.raises(ValueError, match="Nothing to update"):
+            update_knowledge(db, knowledge_id=entry.id)
+
+
 class TestNoteAutoDetection:
     def test_register_note_gets_git_context(self, db, git_repo_with_remote):
         """Note created via register picks up repo/branch/cwd/worktree."""
@@ -458,3 +603,4 @@ class TestNoteAutoDetection:
         assert note.branch is None
         assert note.cwd is not None
         assert note.worktree is None
+

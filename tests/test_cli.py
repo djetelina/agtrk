@@ -34,6 +34,28 @@ def test_register_with_status(tmp_db_env):
     assert result.exit_code == 0
 
 
+def test_register_todo_skips_repo_autodetect(tmp_db_env):
+    """Todo sessions should not auto-detect repo (often cross-repo observations)."""
+    result = runner.invoke(app, ["register", "--task", "Noted for later", "--status", "todo"])
+    assert result.exit_code == 0
+    session_id = _extract_id(result.stdout, "noted-for-later")
+    show = runner.invoke(app, ["show", session_id])
+    assert show.exit_code == 0
+    # Repo line should show '-' (no repo)
+    assert "Repo:" in show.stdout
+    # Should not have picked up any repo from git
+    assert "agtrk" not in show.stdout.split("Repo:")[1].split("\n")[0]
+
+
+def test_register_todo_with_explicit_repo(tmp_db_env):
+    """Even for todo, explicit --repo should be respected."""
+    result = runner.invoke(app, ["register", "--task", "Cross repo work", "--status", "todo", "--repo", "other/repo"])
+    assert result.exit_code == 0
+    session_id = _extract_id(result.stdout, "cross-repo-work")
+    show = runner.invoke(app, ["show", session_id])
+    assert "repo" in show.stdout.split("Repo:")[1].split("\n")[0]
+
+
 def test_register_invalid_status(tmp_db_env):
     result = runner.invoke(app, ["register", "--task", "Bad status", "--status", "garbage"])
     assert result.exit_code != 0
@@ -251,6 +273,83 @@ def test_uninstall(tmp_db_env, tmp_path):
     assert "Bash(agtrk:*)" not in settings["permissions"]["allow"]
     assert "Read" in settings["permissions"]["allow"]
     assert "Grep" in settings["permissions"]["allow"]
+
+
+def test_learn(tmp_db_env):
+    result = runner.invoke(app, ["learn", "--kind", "architecture", "--title", "API layer", "--repo", "acme/widgets", "REST API in src/api/"])
+    assert result.exit_code == 0
+    assert "Learned #" in result.stdout
+    assert "API layer" in result.stdout
+
+
+def test_learn_invalid_kind(tmp_db_env):
+    result = runner.invoke(app, ["learn", "--kind", "garbage", "--title", "Bad", "--repo", "acme/widgets", "content"])
+    assert result.exit_code != 0
+    assert "Invalid kind" in result.stdout
+
+
+def test_recall_empty(tmp_db_env):
+    result = runner.invoke(app, ["recall", "--repo", "acme/widgets"])
+    assert result.exit_code == 0
+    assert "No knowledge entries found" in result.stdout
+
+
+def test_recall_with_entries(tmp_db_env):
+    runner.invoke(app, ["learn", "--kind", "architecture", "--title", "API layer", "--repo", "acme/widgets", "REST"])
+    runner.invoke(app, ["learn", "--kind", "decision", "--title", "ORM choice", "--repo", "acme/widgets", "SQLAlchemy"])
+    result = runner.invoke(app, ["recall", "--repo", "acme/widgets"])
+    assert result.exit_code == 0
+    assert "API layer" in result.stdout
+    assert "ORM choice" in result.stdout
+
+
+def test_recall_with_search(tmp_db_env):
+    runner.invoke(app, ["learn", "--kind", "architecture", "--title", "API layer", "--repo", "acme/widgets", "REST"])
+    runner.invoke(app, ["learn", "--kind", "decision", "--title", "ORM choice", "--repo", "acme/widgets", "SQLAlchemy"])
+    result = runner.invoke(app, ["recall", "--repo", "acme/widgets", "--search", "api"])
+    assert result.exit_code == 0
+    assert "API layer" in result.stdout
+    assert "ORM choice" not in result.stdout
+
+
+def test_recall_with_kind_filter(tmp_db_env):
+    runner.invoke(app, ["learn", "--kind", "architecture", "--title", "API layer", "--repo", "acme/widgets", "REST"])
+    runner.invoke(app, ["learn", "--kind", "decision", "--title", "ORM choice", "--repo", "acme/widgets", "SQLAlchemy"])
+    result = runner.invoke(app, ["recall", "--repo", "acme/widgets", "--kind", "decision"])
+    assert result.exit_code == 0
+    assert "ORM choice" in result.stdout
+    assert "API layer" not in result.stdout
+
+
+def test_forget(tmp_db_env):
+    reg = runner.invoke(app, ["learn", "--kind", "architecture", "--title", "API layer", "--repo", "acme/widgets", "REST"])
+    # Extract the ID from "Learned #1: API layer"
+    entry_id = reg.stdout.split("#")[1].split(":")[0]
+    result = runner.invoke(app, ["forget", entry_id])
+    assert result.exit_code == 0
+    assert "Forgot knowledge entry" in result.stdout
+
+
+def test_forget_nonexistent(tmp_db_env):
+    result = runner.invoke(app, ["forget", "9999"])
+    assert result.exit_code != 0
+    assert "No knowledge entry found" in result.stdout
+
+
+def test_update_knowledge(tmp_db_env):
+    reg = runner.invoke(app, ["learn", "--kind", "architecture", "--title", "API layer", "--repo", "acme/widgets", "REST"])
+    entry_id = reg.stdout.split("#")[1].split(":")[0]
+    result = runner.invoke(app, ["update-knowledge", entry_id, "GraphQL instead"])
+    assert result.exit_code == 0
+    assert "Updated knowledge entry" in result.stdout
+
+
+def test_inject_includes_knowledge_instructions(tmp_db_env):
+    result = runner.invoke(app, ["inject"])
+    assert "agtrk recall" in result.stdout
+    assert "agtrk learn" in result.stdout
+    assert "Knowledge kinds" in result.stdout
+    assert "MUST save them" in result.stdout
 
 
 def test_uninstall_idempotent(tmp_db_env, tmp_path):
