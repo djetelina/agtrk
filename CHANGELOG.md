@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-03-26
+
 ### Added
 
 - New-version-available notification in TUI — checks PyPI on startup and shows a Textual toast when an upgrade is available
