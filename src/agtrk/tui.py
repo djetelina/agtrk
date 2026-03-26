@@ -3,6 +3,7 @@
 import math
 from datetime import datetime, timedelta
 
+from packaging.version import Version
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
@@ -11,10 +12,12 @@ from textual.reactive import reactive
 from textual.screen import ModalScreen
 from textual.widgets import DataTable, Label, Static
 
+from agtrk import __version__
 from agtrk.db import open_db
 from agtrk.git import repo_display_name
 from agtrk.models import Session, Status
 from agtrk.service import get_session, list_sessions
+from agtrk.version_check import get_latest_pypi_version
 
 REFRESH_INTERVAL = 30
 FRESH_THRESHOLD = timedelta(minutes=35)
@@ -465,9 +468,18 @@ class SessionDashboard(App):
         self.theme = "dracula"
         self._load_data()
         self.set_interval(REFRESH_INTERVAL, self._load_data)
+        self.call_later(self.check_for_new_version)
         cols = list(self.query(CardColumn))
         if cols:
             cols[0].focus()
+
+    async def check_for_new_version(self) -> None:
+        latest = await get_latest_pypi_version()
+        if latest and latest > Version(__version__):
+            self.notify(
+                f"✨ Version {latest} is available!\n[dim]Update: pipx upgrade agtrk[/dim]",
+                timeout=20,
+            )
 
     def _refresh_header(self) -> None:
         view = "kanban" if self.kanban_view else "table"

@@ -12,6 +12,8 @@ dependencies = [
     "typer~=0.15",
     "rich~=14.0",
     "textual~=8.1",
+    "httpx>=0.27",
+    "packaging>=24.0",
 ]
 keywords = ["cli", "tui", "agent", "session", "tracking", "claude", "ai"]
 classifiers = [

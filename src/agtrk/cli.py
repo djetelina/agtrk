@@ -331,17 +331,17 @@ def inject() -> None:
         sessions = list_sessions(conn, include_archived=False)
         knowledge_enabled = is_feature_enabled(conn, Feature.knowledge)
 
+    instructions = INJECT_INSTRUCTIONS_BASE
+    if knowledge_enabled:
+        instructions += INJECT_INSTRUCTIONS_KNOWLEDGE
+    hook_console.print(instructions)
+
+    hook_console.print()
     if sessions:
         hook_console.print("SESSION TRACKER — active work:")
         hook_console.print(_build_session_table(sessions))
     else:
         hook_console.print("SESSION TRACKER — no active sessions.")
-
-    hook_console.print()
-    instructions = INJECT_INSTRUCTIONS_BASE
-    if knowledge_enabled:
-        instructions += INJECT_INSTRUCTIONS_KNOWLEDGE
-    hook_console.print(instructions)
     typer.echo(buf.getvalue(), nl=False)
 
 

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New-version-available notification in TUI — checks PyPI on startup and shows a Textual toast when an upgrade is available
+
+### Changed
+
+- Inject output now places static instructions before the dynamic session table (cache-friendly — stable prefix is cacheable across sessions)
+
 ## [1.1.0] - 2026-03-26
 
 ### Added
