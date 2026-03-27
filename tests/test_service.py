@@ -13,6 +13,7 @@ from agtrk.service import (
     is_feature_enabled,
     learn,
     list_features,
+    list_knowledge_repos,
     list_sessions,
     recall,
     register_session,
@@ -567,6 +568,41 @@ class TestUpdateKnowledge:
             update_knowledge(db, knowledge_id=entry.id)
 
 
+class TestListKnowledgeRepos:
+    def test_returns_repo_summaries(self, db):
+        """list_knowledge_repos aggregates entries per repo."""
+        learn(db, repo="acme/widgets", kind="architecture", title="A1", content="c1")
+        learn(db, repo="acme/widgets", kind="decision", title="D1", content="c2")
+        learn(db, repo="acme/other", kind="exploration", title="E1", content="c3")
+
+        summaries = list_knowledge_repos(db)
+        assert len(summaries) == 2
+        repos = [s.repo for s in summaries]
+        assert "acme/widgets" in repos
+        assert "acme/other" in repos
+
+        widgets = next(s for s in summaries if s.repo == "acme/widgets")
+        assert widgets.total == 2
+        assert widgets.counts[Kind.architecture] == 1
+        assert widgets.counts[Kind.decision] == 1
+
+    def test_empty_returns_empty(self, db):
+        """list_knowledge_repos returns empty list when no entries."""
+        assert list_knowledge_repos(db) == []
+
+    def test_ordered_by_latest_updated(self, db):
+        """Repos are ordered by most recently updated entry."""
+        import time
+
+        learn(db, repo="acme/old", kind="architecture", title="Old", content="c")
+        time.sleep(0.01)
+        learn(db, repo="acme/new", kind="architecture", title="New", content="c")
+
+        summaries = list_knowledge_repos(db)
+        assert summaries[0].repo == "acme/new"
+        assert summaries[1].repo == "acme/old"
+
+
 class TestNoteAutoDetection:
     def test_register_note_gets_git_context(self, db, git_repo_with_remote):
         """Note created via register picks up repo/branch/cwd/worktree."""
@@ -611,9 +647,7 @@ class TestNoteAutoDetection:
 class TestFeatureFlags:
     def test_feature_table_exists(self, db):
         """Migration creates the feature table."""
-        row = db.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='feature'"
-        ).fetchone()
+        row = db.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='feature'").fetchone()
         assert row is not None
 
     def test_set_feature_enable(self, db):

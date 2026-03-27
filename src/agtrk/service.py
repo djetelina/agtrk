@@ -536,6 +536,47 @@ _KNOWLEDGE_COLUMNS = "id, repo, kind, title, content, created_at, updated_at"
 
 
 # ---------------------------------------------------------------------------
+# list_knowledge_repos
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RepoKnowledgeSummary:
+    """Aggregated knowledge stats for a single repo."""
+
+    repo: str
+    counts: dict[Kind, int]
+    total: int
+    latest_updated: datetime
+
+
+def list_knowledge_repos(conn: sqlite3.Connection) -> list[RepoKnowledgeSummary]:
+    """Return per-repo knowledge summaries, ordered by most recently updated.
+
+    Each summary contains kind-level counts and the latest updated_at.
+    """
+    rows = conn.execute(
+        "SELECT repo, kind, COUNT(*) as cnt, MAX(updated_at) as latest FROM knowledge GROUP BY repo, kind ORDER BY repo",
+    ).fetchall()
+
+    repo_data: dict[str, RepoKnowledgeSummary] = {}
+    for row in rows:
+        repo = row["repo"]
+        kind = Kind(row["kind"])
+        count = row["cnt"]
+        latest = datetime.fromisoformat(row["latest"])
+
+        if repo not in repo_data:
+            repo_data[repo] = RepoKnowledgeSummary(repo=repo, counts={}, total=0, latest_updated=latest)
+        summary = repo_data[repo]
+        summary.counts[kind] = count
+        summary.total += count
+        summary.latest_updated = max(summary.latest_updated, latest)
+
+    return sorted(repo_data.values(), key=lambda s: s.latest_updated, reverse=True)
+
+
+# ---------------------------------------------------------------------------
 # learn
 # ---------------------------------------------------------------------------
 

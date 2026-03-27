@@ -16,7 +16,8 @@ from agtrk import __version__
 from agtrk.db import open_db
 from agtrk.git import repo_display_name
 from agtrk.models import Session, Status
-from agtrk.service import get_session, list_sessions
+from agtrk.service import get_session, list_knowledge_repos, list_sessions
+from agtrk.tui_knowledge import RepoDetailView, RepoGrid, RepoTile
 from agtrk.version_check import get_latest_pypi_version
 
 REFRESH_INTERVAL = 30
@@ -188,6 +189,7 @@ class HeaderStatus(Container):
                 yield self._archived_label
                 yield Label(" ]")
             with Container(id="h-keys"):
+                yield Label("[bold]k[/] knowledge")
                 yield Label("[bold]v[/] view")
                 yield Label("[bold]a[/] archived")
                 yield Label("[bold]q[/] quit")
@@ -200,6 +202,11 @@ class HeaderStatus(Container):
         self._stats_label.update(stats)
         self._view_label.update(view)
         self._archived_label.update(f"archived: {'on' if archived else 'off'}")
+
+    def update_knowledge_status(self, repo_count: int, total_entries: int, view: str) -> None:
+        self._stats_label.update(f"📚 {repo_count} repos  {total_entries} entries")
+        self._view_label.update(view)
+        self._archived_label.update("")
 
 
 class HeaderLogo(Static):
@@ -444,25 +451,36 @@ class SessionDashboard(App):
     #board { width: 1fr; height: 1fr; }
     #board.hidden { display: none; }
     #table-view.visible { display: block; }
+    #kb-grid { display: none; }
+    #kb-grid.visible { display: block; }
+    #kb-detail { display: none; }
+    #kb-detail.visible { display: block; }
     """
 
     BINDINGS = [
         Binding("q", "quit", show=False),
         Binding("a", "toggle_archived", show=False),
         Binding("v", "toggle_view", show=False),
+        Binding("k", "toggle_knowledge", show=False),
         Binding("escape", "go_back", show=False),
     ]
 
     show_archived: reactive[bool] = reactive(False)
     kanban_view: bool = True
+    # "sessions" | "kb-grid" | "kb-detail"
+    _mode: str = "sessions"
     _sessions: list[Session] = []
 
     def compose(self) -> ComposeResult:
         with Container(id="header"):
             yield HeaderStatus()
             yield HeaderLogo()
+        # Session views
         yield DataTable(id="table-view", cursor_type="row", zebra_stripes=True)
         yield Horizontal(id="board")
+        # Knowledge views
+        yield RepoGrid(id="kb-grid")
+        yield Container(id="kb-detail")
 
     def on_mount(self) -> None:
         self.theme = "dracula"
@@ -481,11 +499,31 @@ class SessionDashboard(App):
                 timeout=20,
             )
 
+    # --- Header ---
+
     def _refresh_header(self) -> None:
-        view = "kanban" if self.kanban_view else "table"
-        self.query_one(HeaderStatus).update_status(self._sessions, view, self.show_archived)
+        header = self.query_one(HeaderStatus)
+        if self._mode == "sessions":
+            view = "kanban" if self.kanban_view else "table"
+            header.update_status(self._sessions, view, self.show_archived)
+        elif self._mode == "kb-grid":
+            summaries = self._kb_summaries
+            total = sum(s.total for s in summaries)
+            header.update_knowledge_status(len(summaries), total, "knowledge")
+        elif self._mode == "kb-detail":
+            summaries = self._kb_summaries
+            total = sum(s.total for s in summaries)
+            header.update_knowledge_status(len(summaries), total, "knowledge · repo")
+
+    # --- Session data ---
+
+    _kb_summaries: list = []
 
     def _load_data(self) -> None:
+        if self._mode in ("kb-grid", "kb-detail"):
+            self._load_knowledge_grid()
+            self._refresh_header()
+            return
         with open_db() as conn:
             new_sessions = list_sessions(conn, include_archived=self.show_archived)
         old_ids = [s.id for s in self._sessions]
@@ -559,8 +597,63 @@ class SessionDashboard(App):
         if restore_target is not None:
             self.call_after_refresh(restore_target.focus)
 
+    # --- Knowledge ---
+
+    def _load_knowledge_grid(self) -> None:
+        with open_db() as conn:
+            self._kb_summaries = list_knowledge_repos(conn)
+        self.query_one(RepoGrid).load(self._kb_summaries)
+
+    def _open_repo_detail(self, repo: str) -> None:
+        self._mode = "kb-detail"
+        self.query_one("#kb-grid").remove_class("visible")
+        detail_container = self.query_one("#kb-detail", Container)
+        detail_container.remove_children()
+        detail_view = RepoDetailView(repo)
+        detail_container.mount(detail_view)
+        detail_container.add_class("visible")
+        self._refresh_header()
+
+    # --- View switching ---
+
+    def _show_sessions(self) -> None:
+        self._mode = "sessions"
+        self.query_one("#kb-grid").remove_class("visible")
+        self.query_one("#kb-detail").remove_class("visible")
+        if self.kanban_view:
+            self.query_one("#board").remove_class("hidden")
+            cols = list(self.query(CardColumn))
+            if cols:
+                cols[0].focus()
+        else:
+            self.query_one("#table-view").add_class("visible")
+            self.query_one("#table-view", DataTable).focus()
+        self._refresh_header()
+
+    def _show_knowledge_grid(self) -> None:
+        self._mode = "kb-grid"
+        # Hide session views
+        self.query_one("#board").add_class("hidden")
+        self.query_one("#table-view").remove_class("visible")
+        self.query_one("#kb-detail").remove_class("visible")
+        # Show and load grid
+        self.query_one("#kb-grid").add_class("visible")
+        self._load_knowledge_grid()
+        self._refresh_header()
+        self._focus_first_tile()
+
+    def _focus_first_tile(self) -> None:
+        def _do_focus() -> None:
+            tiles = list(self.query(RepoTile))
+            if tiles:
+                tiles[0].focus()
+
+        self.call_after_refresh(_do_focus)
+
+    # --- Event handlers ---
+
     def on_resize(self) -> None:
-        if not self.kanban_view:
+        if self._mode == "sessions" and not self.kanban_view:
             self._load_table()
 
     def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
@@ -568,8 +661,17 @@ class SessionDashboard(App):
             return
         self.push_screen(DetailScreen(_build_detail_content(event.row_key.value)))
 
+    # --- Actions ---
+
+    def action_open_repo(self, repo: str) -> None:
+        self._open_repo_detail(repo)
+
     def action_go_back(self) -> None:
-        if self.kanban_view:
+        if self._mode == "kb-detail":
+            self._show_knowledge_grid()
+        elif self._mode == "kb-grid":
+            self._show_sessions()
+        elif self._mode == "sessions" and self.kanban_view:
             focused = self.focused
             if isinstance(focused, CardItem):
                 for a in focused.ancestors_with_self:
@@ -578,10 +680,14 @@ class SessionDashboard(App):
                         return
 
     def action_toggle_archived(self) -> None:
+        if self._mode != "sessions":
+            return
         self.show_archived = not self.show_archived
         self._load_data()
 
     def action_toggle_view(self) -> None:
+        if self._mode != "sessions":
+            return
         self.kanban_view = not self.kanban_view
         self.query_one("#table-view").toggle_class("visible")
         self.query_one("#board").toggle_class("hidden")
@@ -592,6 +698,12 @@ class SessionDashboard(App):
         else:
             self.query_one("#table-view", DataTable).focus()
         self._refresh_header()
+
+    def action_toggle_knowledge(self) -> None:
+        if self._mode == "sessions":
+            self._show_knowledge_grid()
+        else:
+            self._show_sessions()
 
 
 def run_tui() -> None:

@@ -321,6 +321,8 @@ for stable, reusable facts and save each one. Treat this like the register/cron 
   Bad:  "Project uses Typer, tests in tests/, DB uses WAL mode, service layer owns SQL"
   Good: 4 separate entries — "CLI framework: Typer + Rich", "test structure", \
   "DB conventions: WAL + migrations", "service layer pattern".
+- Write entries with enough depth to be useful. The test: would this save a future \
+agent session from re-discovering this by reading source files?
 - If you discover a knowledge entry is outdated, update it immediately:
   `agtrk update-knowledge <id> "corrected content"`
 - If an entry is no longer relevant, remove it: `agtrk forget <id>`

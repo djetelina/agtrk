@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Multi-agent conflict warning — inject output warns when there are active (implementing/planning) sessions in the same repo, nudging the agent to use a worktree
+- TUI knowledge browser — press `k` to browse all knowledge entries across repos as a grid of tiles with proportional ▒ color bars by kind; drill into a repo to see a tree+preview split view
 
 ## [1.2.0] - 2026-03-26
 
