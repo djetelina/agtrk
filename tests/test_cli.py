@@ -77,6 +77,26 @@ def test_list_with_sessions(tmp_db_env):
     assert "Second task" in result.stdout
 
 
+def test_list_plain(tmp_db_env):
+    runner.invoke(app, ["register", "--task", "Plain task"])
+    result = runner.invoke(app, ["list", "--plain"])
+    assert result.exit_code == 0
+    assert "Plain task" in result.stdout
+    # Plain output should not contain box-drawing characters
+    assert "━" not in result.stdout
+    assert "┃" not in result.stdout
+
+
+def test_inject_excludes_done_sessions(tmp_db_env):
+    """Inject should not show sessions with status=done."""
+    reg = runner.invoke(app, ["register", "--task", "Will complete"])
+    session_id = _extract_id(reg.stdout, "will-complete")
+    runner.invoke(app, ["complete", session_id, "--summary", "Done"])
+    result = runner.invoke(app, ["inject"])
+    assert result.exit_code == 0
+    assert "Will complete" not in result.stdout
+
+
 def test_show(tmp_db_env):
     reg = runner.invoke(app, ["register", "--task", "My session"])
     session_id = _extract_id(reg.stdout, "my-session")
@@ -94,6 +114,15 @@ def test_update(tmp_db_env):
 
     result = runner.invoke(app, ["update", session_id, "--status", "implementing", "--note", "started"])
     assert result.exit_code == 0
+
+
+def test_update_rejects_status_done(tmp_db_env):
+    reg = runner.invoke(app, ["register", "--task", "No done shortcut"])
+    session_id = _extract_id(reg.stdout, "no-done-shortcut")
+
+    result = runner.invoke(app, ["update", session_id, "--status", "done"])
+    assert result.exit_code == 1
+    assert "agtrk complete" in result.stdout
 
 
 def test_heartbeat(tmp_db_env):
@@ -182,6 +211,24 @@ def test_inject_with_sessions(tmp_db_env):
     assert "future session" in result.stdout
 
 
+def test_inject_compact_after_compaction(tmp_db_env, monkeypatch):
+    """SessionStart with source=compact should produce compact output."""
+    runner.invoke(app, ["register", "--task", "Active work"])
+
+    import agtrk.cli
+
+    monkeypatch.setattr(agtrk.cli, "_read_hook_event", lambda: {"hook_event_name": "SessionStart", "source": "compact"})
+    result = runner.invoke(app, ["inject"])
+    assert result.exit_code == 0
+    assert "Active work" in result.stdout
+    assert "compacted" in result.stdout
+    assert "agtrk update" in result.stdout
+    assert "agtrk complete" in result.stdout
+    # Should NOT contain full registration gate or cron creation instructions
+    assert "Register or resume" not in result.stdout
+    assert "CronCreate" not in result.stdout
+
+
 def test_install_fresh(tmp_db_env, tmp_path):
     settings_path = tmp_path / ".claude" / "settings.json"
     settings_path.parent.mkdir(parents=True)
@@ -193,10 +240,8 @@ def test_install_fresh(tmp_db_env, tmp_path):
     settings = json.loads(settings_path.read_text())
     hooks = settings["hooks"]
     assert "SessionStart" in hooks
-    assert "PreCompact" in hooks
-    for event in ("SessionStart", "PreCompact"):
-        cmds = [h["command"] for entry in hooks[event] for h in entry["hooks"]]
-        assert any("agtrk inject" in c for c in cmds)
+    cmds = [h["command"] for entry in hooks["SessionStart"] for h in entry["hooks"]]
+    assert any("agtrk inject" in c for c in cmds)
     assert "Bash(agtrk:*)" in settings["permissions"]["allow"]
 
 
@@ -218,8 +263,31 @@ def test_install_idempotent(tmp_db_env, tmp_path):
     settings = json.loads(settings_path.read_text())
     agtrk_entries = [entry for entry in settings["hooks"]["SessionStart"] for h in entry["hooks"] if "agtrk inject" in h["command"]]
     assert len(agtrk_entries) == 1
-    assert "PreCompact" in settings["hooks"]
     assert settings["permissions"]["allow"].count("Bash(agtrk:*)") == 1
+
+
+def test_install_removes_stale_precompact(tmp_db_env, tmp_path):
+    """Install should remove agtrk inject from PreCompact (leftover from older versions)."""
+    settings_path = tmp_path / ".claude" / "settings.json"
+    settings_path.parent.mkdir(parents=True)
+    settings_path.write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "SessionStart": [{"hooks": [{"type": "command", "command": "agtrk inject", "timeout": 10}]}],
+                    "PreCompact": [{"hooks": [{"type": "command", "command": "agtrk inject", "timeout": 10}]}],
+                },
+                "permissions": {"allow": ["Bash(agtrk:*)"]},
+            }
+        )
+    )
+
+    result = runner.invoke(app, ["install", "--settings", str(settings_path)])
+    assert result.exit_code == 0
+
+    settings = json.loads(settings_path.read_text())
+    precompact_cmds = [h["command"] for entry in settings["hooks"].get("PreCompact", []) for h in entry["hooks"]]
+    assert not any("agtrk inject" in c for c in precompact_cmds)
 
 
 def test_install_preserves_other_hooks(tmp_db_env, tmp_path):
@@ -370,6 +438,26 @@ def test_inject_includes_knowledge_when_enabled(tmp_db_env):
     assert "agtrk learn" in result.stdout
     assert "Knowledge kinds" in result.stdout
     assert "MUST save them" in result.stdout
+
+
+def test_inject_compact_excludes_knowledge_when_disabled(tmp_db_env, monkeypatch):
+    import agtrk.cli
+
+    monkeypatch.setattr(agtrk.cli, "_read_hook_event", lambda: {"hook_event_name": "SessionStart", "source": "compact"})
+    result = runner.invoke(app, ["inject"])
+    assert result.exit_code == 0
+    assert "agtrk recall" not in result.stdout
+
+
+def test_inject_compact_includes_knowledge_when_enabled(tmp_db_env, monkeypatch):
+    import agtrk.cli
+
+    runner.invoke(app, ["feature", "enable", "knowledge"])
+    monkeypatch.setattr(agtrk.cli, "_read_hook_event", lambda: {"hook_event_name": "SessionStart", "source": "compact"})
+    result = runner.invoke(app, ["inject"])
+    assert result.exit_code == 0
+    assert "agtrk recall" in result.stdout
+    assert "agtrk learn" in result.stdout
 
 
 def test_uninstall_idempotent(tmp_db_env, tmp_path):

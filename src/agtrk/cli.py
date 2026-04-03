@@ -2,6 +2,7 @@
 
 import io
 import json
+import sys
 from pathlib import Path
 from typing import NoReturn
 
@@ -107,13 +108,16 @@ def default(
     _print_list(archived=False, show_all=False)
 
 
-def _print_list(archived: bool, show_all: bool, verbose: bool = False) -> None:
+def _print_list(archived: bool, show_all: bool, verbose: bool = False, plain: bool = False) -> None:
     with open_db() as conn:
         sessions = list_sessions(conn, include_archived=show_all, archived_only=archived)
     if not sessions:
         console.print("No archived sessions" if archived else "No active sessions")
         return
-    if verbose:
+    if plain:
+        for s in sessions:
+            console.print(_build_inject_session_list([s]))
+    elif verbose:
         table = Table(show_header=True)
         table.add_column("ID", style="bold")
         table.add_column("Status")
@@ -132,7 +136,8 @@ def _print_list(archived: bool, show_all: bool, verbose: bool = False) -> None:
             )
     else:
         table = _build_session_table(sessions)
-    console.print(table)
+    if not plain:
+        console.print(table)
 
 
 # --- User commands ---
@@ -143,9 +148,10 @@ def list_cmd(
     archived: bool = typer.Option(False, "--archived", help="Show only archived sessions"),
     show_all: bool = typer.Option(False, "--all", help="Show all sessions including archived"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Show all columns"),
+    plain: bool = typer.Option(False, "--plain", help="Plain text output (one line per session)"),
 ) -> None:
     """List sessions."""
-    _print_list(archived=archived, show_all=show_all, verbose=verbose)
+    _print_list(archived=archived, show_all=show_all, verbose=verbose, plain=plain)
 
 
 @app.command()
@@ -336,27 +342,71 @@ Knowledge kinds:
 )
 
 
+INJECT_INSTRUCTIONS_COMPACT = """\
+SESSION TRACKER — context was compacted, here is a refresher.
+
+Your heartbeat cron is already running — do NOT create another one.
+
+Command reference:
+- `agtrk update <id> --status <{statuses}> --note "..." --task "..." --issue KEY-123`
+- `agtrk complete <id> --summary "..."` (requires user confirmation — do NOT complete on your own)
+  - Also delete the heartbeat cron with CronDelete
+- `agtrk reopen <id>` to reactivate a completed session
+- `agtrk search <query>` to find sessions (add --all for archived)
+- `agtrk register --task "..." --status todo` for work you notice but shouldn't act on now""".format(
+    statuses="|".join(s.value for s in Status if s != Status.done),
+)
+
+INJECT_INSTRUCTIONS_COMPACT_KNOWLEDGE = """
+
+Knowledge refresher:
+- `agtrk recall --search <topic>` before reading files
+- `agtrk learn --kind <kind> --title "..." "..."` to save stable facts
+- `agtrk update-knowledge <id> "..."` / `agtrk forget <id>` to maintain entries"""
+
+
 # --- Agent commands ---
 
 
+def _read_hook_event() -> dict:
+    """Read hook event JSON from stdin (empty dict if unavailable)."""
+    if sys.stdin.isatty():
+        return {}
+    try:
+        return json.loads(sys.stdin.read())
+    except (json.JSONDecodeError, OSError):
+        return {}
+
+
 @app.command(rich_help_panel="Agent commands")
-def inject() -> None:
+def inject(
+    compact: bool = typer.Option(False, "--compact", help="Output compact refresher (for testing; auto-detected in hooks)"),
+) -> None:
     """Output session context and usage instructions for agent hooks."""
+    if not compact:
+        hook_data = _read_hook_event()
+        compact = hook_data.get("hook_event_name") == "SessionStart" and hook_data.get("source") == "compact"
+
     buf = io.StringIO()
     hook_console = Console(file=buf, force_terminal=False, highlight=False)
 
     repo = detect_repo()
 
     with open_db() as conn:
-        all_sessions = list_sessions(conn, include_archived=False)
-        scoped_sessions = list_sessions(conn, include_archived=False, repo=repo) if repo else all_sessions
+        all_sessions = [s for s in list_sessions(conn, include_archived=False) if s.status != Status.done]
+        scoped_sessions = [s for s in all_sessions if repo is None or s.repo == repo or s.repo is None]
         knowledge_enabled = is_feature_enabled(conn, Feature.knowledge)
 
     other_count = len(all_sessions) - len(scoped_sessions)
 
-    instructions = INJECT_INSTRUCTIONS_BASE
-    if knowledge_enabled:
-        instructions += INJECT_INSTRUCTIONS_KNOWLEDGE
+    if compact:
+        instructions = INJECT_INSTRUCTIONS_COMPACT
+        if knowledge_enabled:
+            instructions += INJECT_INSTRUCTIONS_COMPACT_KNOWLEDGE
+    else:
+        instructions = INJECT_INSTRUCTIONS_BASE
+        if knowledge_enabled:
+            instructions += INJECT_INSTRUCTIONS_KNOWLEDGE
     hook_console.print(instructions)
 
     active_statuses = {Status.implementing, Status.planning}
@@ -367,16 +417,20 @@ def inject() -> None:
         hook_console.print("SESSION TRACKER — active work:")
         hook_console.print(_build_inject_session_list(scoped_sessions))
         if other_count > 0:
-            hook_console.print(f"(+{other_count} session(s) in other repos)")
+            hook_console.print(f"(+{other_count} session(s) in other repos — `agtrk list --plain` for full list)")
     else:
         hook_console.print("SESSION TRACKER — no active sessions.")
         if other_count > 0:
-            hook_console.print(f"(+{other_count} session(s) in other repos)")
+            hook_console.print(f"(+{other_count} session(s) in other repos — `agtrk list --plain` for full list)")
     if active_in_repo:
         hook_console.print(f"\nWARNING: {len(active_in_repo)} active session(s) in this repo. Use a worktree to avoid conflicts.")
     typer.echo(buf.getvalue(), nl=False)
 
 
+# Registered for SessionStart only.
+# Behavior is determined by the source field from stdin JSON:
+#   source=startup/resume → full instructions
+#   source=compact        → compact refresher (no registration gate, no cron creation)
 AGTRK_HOOK_ENTRY = {
     "hooks": [
         {
@@ -408,11 +462,17 @@ def install(
 
     hooks = data.setdefault("hooks", {})
 
-    for event in ("SessionStart", "PreCompact"):
-        entries = hooks.setdefault(event, [])
-        already = any("agtrk inject" in h.get("command", "") for entry in entries for h in entry.get("hooks", []))
-        if not already:
-            entries.append(AGTRK_HOOK_ENTRY)
+    # Register for SessionStart
+    entries = hooks.setdefault("SessionStart", [])
+    already = any("agtrk inject" in h.get("command", "") for entry in entries for h in entry.get("hooks", []))
+    if not already:
+        entries.append(AGTRK_HOOK_ENTRY)
+
+    # Remove stale PreCompact hook from older versions
+    if "PreCompact" in hooks:
+        hooks["PreCompact"] = [
+            entry for entry in hooks["PreCompact"] if not any("agtrk inject" in h.get("command", "") for h in entry.get("hooks", []))
+        ]
 
     # Ensure agtrk commands are allowed without prompting
     agtrk_permission = "Bash(agtrk:*)"
@@ -484,6 +544,9 @@ def update(
     branch: str | None = typer.Option(None, "--branch", help="Branch override for note"),
 ) -> None:
     """Update a session."""
+    if status and status == Status.done:
+        console.print("[red]Error:[/red] Use `agtrk complete <id> --summary '...'` to mark sessions done.")
+        raise typer.Exit(1)
     try:
         with open_db() as conn:
             update_session(conn, id_or_prefix=id, task=task, repo=repo, status=status, issue=issue, note=note, branch=branch)

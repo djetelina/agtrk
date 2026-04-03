@@ -7,16 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-04-03
+
 ### Changed
 
 - Inject session table now uses plain text (`id | status | task`) instead of Rich box-drawing characters — saves tokens when consumed by agents
 - Inject session list is now repo-scoped — auto-detects current repo and shows only matching sessions (plus sessions with no repo); other-repo sessions collapsed to a count
 - `update`, `complete`, and `reopen` commands no longer print confirmation messages — saves tokens in agent conversations
 
+### Fixed
+
+- `agtrk update --status done` now rejected with a helpful error redirecting to `agtrk complete` — prevents bypassing the summary requirement (#6)
+- Post-compaction duplicate commands — inject reads `hook_event_name`/`source` from stdin JSON and outputs a compact refresher (command reference, cron awareness, no registration gate) after compaction instead of full instructions; install now removes stale PreCompact hook from older versions (#7)
+- Inject no longer shows done sessions (could appear if `update --status done` bypassed `complete` before the fix)
+- "other repos" count in inject now includes a hint: `agtrk list --plain`
+
 ### Added
 
+- `agtrk list --plain` — one-line-per-session plain text output without Rich tables
 - Multi-agent conflict warning — inject output warns when there are active (implementing/planning) sessions in the same repo, nudging the agent to use a worktree
 - TUI knowledge browser — press `k` to browse all knowledge entries across repos as a grid of tiles with proportional ▒ color bars by kind; drill into a repo to see a tree+preview split view
+- TUI logo now shows version in the bottom border
 
 ## [1.2.0] - 2026-03-26
 

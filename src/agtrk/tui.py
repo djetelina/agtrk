@@ -10,7 +10,7 @@ from textual.binding import Binding
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.reactive import reactive
 from textual.screen import ModalScreen
-from textual.widgets import DataTable, Label, Static
+from textual.widgets import DataTable, Footer, Label, Link, Static
 
 from agtrk import __version__
 from agtrk.db import open_db
@@ -161,14 +161,13 @@ class HeaderStatus(Container):
         layout: horizontal;
         padding: 0 1;
     }
-    #h-keys {
+    #h-links {
         width: auto;
         align: right middle;
         layout: horizontal;
     }
-    #h-keys Label {
+    #h-links Link {
         padding: 0 1;
-        color: $text-muted;
     }
     """
 
@@ -188,11 +187,9 @@ class HeaderStatus(Container):
                 yield Label(" ]  \\[ ")
                 yield self._archived_label
                 yield Label(" ]")
-            with Container(id="h-keys"):
-                yield Label("[bold]k[/] knowledge")
-                yield Label("[bold]v[/] view")
-                yield Label("[bold]a[/] archived")
-                yield Label("[bold]q[/] quit")
+            with Container(id="h-links"):
+                yield Link("GitHub", url="https://github.com/djetelina/agtrk")
+                yield Link("Changelog", url="https://github.com/djetelina/agtrk/blob/main/CHANGELOG.md")
 
     def update_status(self, sessions: list, view: str, archived: bool) -> None:
         counts: dict[Status, int] = {}
@@ -220,8 +217,8 @@ class HeaderLogo(Static):
     def render(self) -> str:
         # Middle: │  agtrk  │  (visible: 1+2+5+2+1 = 11 chars)
         # Top:   __┌─────┐    (2 spaces + box of 7 = 9, plus ┐ at pos 9)
-        # Must match: positions 2-8 are dashes (indices of inner content)
-        return "[$accent] ┌─────┐\n[$secondary]│[/$secondary] [$primary]agtrk[/$primary] [$secondary]│[/$secondary]\n[$accent] └─────┘"
+        # Bottom: version fills the 5-char dash slot
+        return f"[$accent] ┌─────┐\n[$secondary]│[/$secondary] [$primary]agtrk[/$primary] [$secondary]│[/$secondary]\n[$accent] └{__version__}┘"
 
 
 # ---------------------------------------------------------------------------
@@ -458,11 +455,11 @@ class SessionDashboard(App):
     """
 
     BINDINGS = [
-        Binding("q", "quit", show=False),
-        Binding("a", "toggle_archived", show=False),
-        Binding("v", "toggle_view", show=False),
-        Binding("k", "toggle_knowledge", show=False),
-        Binding("escape", "go_back", show=False),
+        Binding("k", "toggle_knowledge", "Knowledge"),
+        Binding("v", "toggle_view", "View"),
+        Binding("a", "toggle_archived", "Archived"),
+        Binding("escape", "go_back", "Back", show=False),
+        Binding("q", "quit", "Quit"),
     ]
 
     show_archived: reactive[bool] = reactive(False)
@@ -481,6 +478,7 @@ class SessionDashboard(App):
         # Knowledge views
         yield RepoGrid(id="kb-grid")
         yield Container(id="kb-detail")
+        yield Footer()
 
     def on_mount(self) -> None:
         self.theme = "dracula"
