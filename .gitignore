@@ -10,6 +10,8 @@ wheels/
 .venv
 
 # Superpowers skill artifacts
+.claude
+.superpowers
 docs/superpowers/
 
 # Local settings

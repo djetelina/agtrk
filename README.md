@@ -16,6 +16,11 @@ There's also a TUI dashboard (`agtrk tui`) if you want to see everything at a gl
 
 ```bash
 pipx install agtrk
+
+# or with Homebrew
+brew install djetelina/tap/agtrk
+
+# then
 agtrk install
 ```
 
