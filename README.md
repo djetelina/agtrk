@@ -1,5 +1,7 @@
 # agtrk
 
+[![opentrend.dev reach](https://opentrend.dev/badge/djetelina/agtrk/reach.svg)](https://opentrend.dev/)
+
 Continuity for Claude Code conversations.
 
 Claude Code sessions are ephemeral — close one, and the next has no idea what you were doing. agtrk fixes that. It hooks into Claude Code and gives the agent a persistent view of what's in progress, so conversations can pick up where the last one left off.
