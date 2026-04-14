@@ -5,8 +5,16 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-DEFAULT_DB_PATH = Path.home() / ".local" / "share" / "agtrk" / "sessions.db"
-_LEGACY_DB_PATH = Path.home() / ".local" / "share" / "claude-sessions" / "sessions.db"
+from platformdirs import user_data_dir
+
+DEFAULT_DB_PATH = Path(user_data_dir("agtrk")) / "sessions.db"
+
+_LEGACY_PATHS = [
+    # Most recent legacy: hardcoded ~/.local/share/agtrk (pre-platformdirs)
+    Path.home() / ".local" / "share" / "agtrk" / "sessions.db",
+    # Oldest legacy: original claude-sessions name
+    Path.home() / ".local" / "share" / "claude-sessions" / "sessions.db",
+]
 
 # ---------------------------------------------------------------------------
 # Migrations
@@ -113,10 +121,12 @@ def get_db(db_path: Path | None = None) -> sqlite3.Connection:
         resolved = db_path
     else:
         resolved = DEFAULT_DB_PATH
-        # Migrate from old claude-sessions location
-        if not resolved.exists() and _LEGACY_DB_PATH.exists():
-            resolved.parent.mkdir(parents=True, exist_ok=True)
-            _LEGACY_DB_PATH.rename(resolved)
+        if not resolved.exists():
+            for legacy in _LEGACY_PATHS:
+                if legacy.exists():
+                    resolved.parent.mkdir(parents=True, exist_ok=True)
+                    legacy.rename(resolved)
+                    break
 
     resolved.parent.mkdir(parents=True, exist_ok=True)
 

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Database path now uses `platformdirs` to respect XDG Base Directory spec (and platform-native paths on macOS/Windows). Existing databases at the old hardcoded `~/.local/share/agtrk/` or `~/.local/share/claude-sessions/` paths are auto-migrated on first run.
+
 ## [1.3.0] - 2026-04-03
 
 ### Changed
