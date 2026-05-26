@@ -2,6 +2,8 @@
 
 [![opentrend.dev reach](https://opentrend.dev/badge/djetelina/agtrk/reach.svg)](https://opentrend.dev/)
 
+> **Deprecated.** Claude Code's built-in `claude agents` covers ~80% of what agtrk does, for free and with less setup. Unless you specifically need agtrk's TUI, SQLite-backed notes, or cross-session knowledge recall, prefer `claude agents`. This repo is no longer actively developed.
+
 Continuity for Claude Code conversations.
 
 Claude Code sessions are ephemeral — close one, and the next has no idea what you were doing. agtrk fixes that. It hooks into Claude Code and gives the agent a persistent view of what's in progress, so conversations can pick up where the last one left off.
